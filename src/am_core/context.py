@@ -67,7 +67,7 @@ class WorldCtx:
         self.workflow_id = workflow_id
         self.run_id = run_id
         self.run_dir = run_dir
-        self.flags = {}
+        self.state = {}
         self.event_log = []
 
     def log_event(self, event):
@@ -78,7 +78,7 @@ class WorldCtx:
         data = {
             "workflow_id": self.workflow_id,
             "run_id": self.run_id,
-            "flags": self.flags,
+            "state": self.state,
             "event_log": self.event_log,
         }
         stJson = json.dumps(data, indent=2, ensure_ascii=False)
@@ -91,7 +91,7 @@ class WorldCtx:
     def load(run_dir, run_id: str = "world"):
         data = json.loads((run_dir / f"world_{run_id}.json").read_text())
         wc = WorldCtx(data["workflow_id"], data["run_id"], run_dir)
-        wc.flags.update(data["flags"])
+        wc.state.update(data["state"])
         wc.event_log.extend(data["event_log"])
         return wc
     
@@ -103,18 +103,31 @@ class BaseCtx:
         LeakMonitor.track_ctx(self)
         self.name = name
         self.parent = parent_orchCtx
-        self.flags = {}
-        self.cache = {}
+        self.exposure = {}
+        self.init = {}
+        self.scratch = {}
+        self.event = {}
+        self.ref = {}
 
     def get(self, key, default: Optional[Any]=None):
-        if key in self.flags:
-            return self.flags[key]
+        if key in self.exposure:
+            return self.exposure[key]
         if self.parent:
             return self.parent.get(key, default)
         return default
 
+    def get_ref(self, key, default: Optional[Any]=None):
+        if key in self.ref:
+            return self.ref[key]
+        if self.parent:
+            return self.parent.get_ref(key, default)
+        return default
+
     def set(self, key, value:Any):
-        self.flags[key] = value
+        self.exposure[key] = value
+        
+    def set_ref(self, key, value:Any):
+        self.ref[key] = value
 
     def print_ctx_tree(self, indent=0):
         print("  " * indent + self.name)

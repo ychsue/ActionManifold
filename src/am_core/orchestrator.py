@@ -58,7 +58,7 @@ class Orchestrator:
                 sm = cls(sm_ctx, self)
                 await sm.run()
                 # merge stateCtx → orchCtx
-                self.orchCtx.flags.update(sm_ctx.flags)
+                self.orchCtx.exposure.update(sm_ctx.exposure)
 
 
             # 如果是終止 state，結束執行

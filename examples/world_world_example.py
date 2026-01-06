@@ -1,10 +1,10 @@
 from pathlib import Path
 
 from sympy import Le
-from ActionManifold.orchestrator import Orchestrator
-from ActionManifold.context import WorldCtx, CtxBus
-from ActionManifold.state_machine import StateMachine, WorldRunnerFactory
-from ActionManifold.leak_monitor import LeakMonitor
+from am_core.orchestrator import Orchestrator
+from am_core.context import WorldCtx, CtxBus
+from am_core.state_machine import StateMachine, WorldRunnerFactory
+from am_core.leak_monitor import LeakMonitor
 import asyncio
 
 class InputNameMachine(StateMachine):

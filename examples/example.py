@@ -1,9 +1,9 @@
 from sympy import im
-from ActionManifold.state_machine import StateMachine, WorldRunner
-from ActionManifold.orchestrator import Orchestrator
-from ActionManifold.context import WorldCtx, CtxBus
+from am_core.state_machine import StateMachine, WorldRunner
+from am_core.orchestrator import Orchestrator
+from am_core.context import WorldCtx, CtxBus
 from pathlib import Path
-from ActionManifold.leak_monitor import LeakMonitor
+from am_core.leak_monitor import LeakMonitor
 import asyncio
 
 class InputName(StateMachine):

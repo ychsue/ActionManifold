@@ -1,0 +1,21 @@
+[project]
+name = "am-core"
+version = "0.1.0"
+description = "ActionManifold Core Development Semantics Engine"
+authors = [
+    { name = "Young-Chung Hsue" }
+]
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = []
+
+# 這裡是重點：建立 am 指令
+[project.scripts]
+am = "am_core.cli:main"
+
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]

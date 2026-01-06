@@ -84,7 +84,7 @@ class WorldRunner(StateMachine):
 
         except Exception as e:
             status = "error"
-            self.inner_world.flags["exception"] = str(e)
+            self.inner_world.state["exception"] = str(e)
             raise
 
         finally:
@@ -102,7 +102,7 @@ class WorldRunner(StateMachine):
             # 把結果寫回 ctx
             self.ctx.set("world_run_id", self.inner_world.run_id)
             self.ctx.set("world_dir", str(self.inner_world.run_dir))
-            self.ctx.set("world_flags", self.inner_world.flags)
+            self.ctx.set("world_state", self.inner_world.state)
 
         # 清掉 temp orchestrator（避免 leak）
         if self.orch.name == "TempWorldRunnerOrch":
@@ -123,9 +123,9 @@ class WorldRunner(StateMachine):
         self.run_id = new_run_id
         self.run_dir = self.run_dir.parent.parent / new_run_id
 
-        # 建立新的世界，繼承舊世界的 flags
+        # 建立新的世界，繼承舊世界的 state
         self.inner_world = WorldCtx(self.workflow_id, self.run_id, self.run_dir)
-        self.inner_world.flags.update(old_world.flags)
+        self.inner_world.state.update(old_world.state)
 
         # 繼續跑（可以選擇從某個 state 開始，這裡先簡化成重新跑）
         self._build_root_orchestrator()
@@ -157,6 +157,6 @@ class WorldRunnerFactory:
                 )
             async def run(self):
                 await self.wr.run()
-                # merge world flags into ctx
+                # merge world state into ctx
                 self.ctx.set("world", self.wr.inner_world)
         return _WorldRunner
