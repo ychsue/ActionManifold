@@ -1,6 +1,6 @@
 from inspect import isclass
 
-from am_core.feature.feature_unit import feature_unit
+from .feature.feature_unit import feature_unit
 from .leak_monitor import LeakMonitor, leak_orch_checked_run
 from .context import OrchCtx, StateCtx, CtxBus, WorldCtx
 from pathlib import Path

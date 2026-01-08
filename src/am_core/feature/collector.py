@@ -4,6 +4,8 @@ import importlib.util
 import pkgutil
 from pathlib import Path
 from typing import List
+
+from git import Optional
 from .feature_unit import FEATURE_UNITS, feature_unit
 
 @feature_unit(
@@ -12,9 +14,10 @@ from .feature_unit import FEATURE_UNITS, feature_unit
     display_name="Collect Feature Units",
     notes="遞迴掃描 root_path，收集所有帶有 @unit 的方法並轉為 FeatureUnit"
 )
-def collect_feature_units(root_path: str):
+def collect_feature_units(root_path: str, pkg_path: Optional[str] = None) -> List:
     """
     root_path: 字串路徑，例如 "src" 或 "am_meta"
+    pkg_path: package 根目錄路徑，用於決定 module 名稱，預設為 root_path
     掃描該路徑下所有 .py 檔案，import 它們，並收集 FeatureUnit。
     """
 
@@ -23,10 +26,13 @@ def collect_feature_units(root_path: str):
     if not root.exists():
         raise ValueError(f"Root path does not exist: {root}")
 
-    cwd_path = Path.cwd().resolve()
+    if pkg_path is None:
+        pkg_dir = root
+    else:
+        pkg_dir = Path(pkg_path).resolve()
 
     for py_file in root.rglob("*.py"):
-        module_name = _module_name_from_path(cwd_path, py_file)
+        module_name = _module_name_from_path(pkg_dir, py_file)
 
         if module_name in sys.modules:
             continue

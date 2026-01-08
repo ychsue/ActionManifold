@@ -104,9 +104,9 @@ class FeatureUnitGraph:
         # 處理沒有對應 FeatureUnit 的 function/class
         for fn in fun_without_unit:
             fn_key = get_fn_key(fn)
-            node_id = f"external_{fn_key[-1]}"
+            node_id = f"nounit_{fn_key[-1]}"
             new_unit = FeatureUnit(
-                id=node_id,fn=fn,display_name=f"External {fn_key[-1]}",belongs_to=["external"],status="unknown",notes="External dependency")
+                id=node_id,fn=fn,display_name=f"No Unit {fn_key[-1]}",belongs_to=["no_unit"],status="unknown",notes="Without corresponding FeatureUnit")
             self.units.append( new_unit )
             if node_id not in self.graph:
                 self.graph.add_node(

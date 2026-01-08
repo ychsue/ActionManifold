@@ -26,13 +26,13 @@ This CLI automatically:
 - Generates reports and visualizations
 """
 
-import argparse
+from typing import Optional
 import click
-from am_core.feature.collector import collect_feature_units
-from am_core.feature.feature_unit import feature_unit
-from am_core.graph import FeatureUnitGraph
-from am_core.feature.report import generate_roadmap
-from am_core.feature.visualize import visualize_timeline, visualize_gantt
+from .feature.collector import collect_feature_units
+from .feature.feature_unit import feature_unit
+from .graph import FeatureUnitGraph
+from .feature.report import generate_roadmap
+from .feature.visualize import visualize_timeline, visualize_gantt
 
 @click.group()
 def cli():
@@ -42,10 +42,10 @@ def cli():
 # ------------------------------------------------------------
 # Helper: Build graph from root directory
 # ------------------------------------------------------------
-def build_graph_from_root(root_paths: list[str]) -> FeatureUnitGraph:
+def build_graph_from_root(root_paths: list[str], pkg_path: Optional[str] = None) -> FeatureUnitGraph:
     units = []
     for root_path in root_paths:
-        units.extend(collect_feature_units(root_path))
+        units.extend(collect_feature_units(root_path, pkg_path=pkg_path))
     return FeatureUnitGraph(units)
 
 
@@ -114,10 +114,11 @@ def cmd_mainline(args):
 # ------------------------------------------------------------
 @cli.command()
 @click.option("--root", multiple=True, required=True, help="Root paths to scan")
+@click.option("--pkg_path", default=None, help="Package root path for module naming")
 @click.option("--output", default="mermaid.md")
-def mermaid(root, output):
+def mermaid(root, pkg_path, output):
     """Generate Mermaid dependency graph"""
-    graph = build_graph_from_root(root)
+    graph = build_graph_from_root(root, pkg_path=pkg_path)
     if output:
         with open(output, "w") as f:
             f.write(graph.to_mermaid())
@@ -131,11 +132,12 @@ def mermaid(root, output):
 # ------------------------------------------------------------
 @cli.command()
 @click.option("--root", multiple=True, required=True)
+@click.option("--pkg_path", default=None, help="Package root path for module naming")
 @click.option("--output", default="roadmap.md")
 @click.option("--kickoff", default=None)
-def roadmap(root, output, kickoff):
+def roadmap(root, pkg_path, output, kickoff):
     """Generate roadmap.md"""
-    graph = build_graph_from_root(root)
+    graph = build_graph_from_root(root, pkg_path=pkg_path)
     generate_roadmap(graph, output, kickoff=kickoff)
     click.echo(f"✅ Roadmap generated at {output}")
 
@@ -145,10 +147,11 @@ def roadmap(root, output, kickoff):
 # ------------------------------------------------------------
 @cli.command()
 @click.option("--root", multiple=True, required=True)
+@click.option("--pkg_path", default=None, help="Package root path for module naming")
 @click.option("--pending", is_flag=True)
-def graph(root, pending):
+def graph(root, pkg_path, pending):
     """Visualize dependency graph"""
-    graph = build_graph_from_root(root)
+    graph = build_graph_from_root(root, pkg_path=pkg_path)
     graph.visualize(pending=pending)
 
 
@@ -157,10 +160,11 @@ def graph(root, pending):
 # ------------------------------------------------------------
 @cli.command()
 @click.option("--root", multiple=True, required=True)
+@click.option("--pkg_path", default=None, help="Package root path for module naming")
 @click.option("--pending", is_flag=True)
-def timeline(root, pending):
+def timeline(root, pkg_path, pending):
     """Visualize timeline"""
-    graph = build_graph_from_root(root)
+    graph = build_graph_from_root(root, pkg_path=pkg_path)
     visualize_timeline(graph, pending=pending)
 
 
@@ -169,10 +173,11 @@ def timeline(root, pending):
 # ------------------------------------------------------------
 @cli.command()
 @click.option("--root", multiple=True, required=True)
+@click.option("--pkg_path", default=None, help="Package root path for module naming")
 @click.option("--pending", is_flag=True)
-def gantt(root, pending):
+def gantt(root, pkg_path, pending):
     """Visualize Gantt chart"""
-    graph = build_graph_from_root(root)
+    graph = build_graph_from_root(root, pkg_path=pkg_path)
     visualize_gantt(graph, pending=pending)
 
 
@@ -181,11 +186,11 @@ def gantt(root, pending):
 # ------------------------------------------------------------
 @cli.command()
 @click.option("--root", multiple=True, required=True)
+@click.option("--pkg_path", default=None, help="Package root path for module naming")
 @click.option("--start", required=True, help="Kickoff node ID ending with this string")
-def mainline(root, start):
+def mainline(root, pkg_path, start):
     """Analyze mainline from a kickoff node"""
-    graph = build_graph_from_root(root)
-
+    graph = build_graph_from_root(root, pkg_path=pkg_path)
     # 找出真正的 kickoff node ID
     matched_ids = [uid for uid in graph.units_by_id.keys() if uid.endswith(start)]
     if not matched_ids:

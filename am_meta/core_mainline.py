@@ -1,8 +1,8 @@
 # am_meta/core_mainline.py
 
 from datetime import datetime
-from am_core.feature.feature_unit import feature_unit
-from am_core.graph import FeatureUnitGraph
+from ..src.am_core.feature.feature_unit import feature_unit
+from ..src.am_core.graph import FeatureUnitGraph
 
 
 class AMCoreMainline:

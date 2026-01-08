@@ -9,6 +9,9 @@ readme = "README.md"
 requires-python = ">=3.10"
 dependencies = []
 
+[project.optional-dependencies]
+dev = ["pytest"]
+
 # 這裡是重點：建立 am 指令
 [project.scripts]
 am = "am_core.cli:main"
