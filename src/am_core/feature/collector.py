@@ -1,57 +1,77 @@
-import os
+import sys
 import inspect
-import importlib
+import importlib.util
+import pkgutil
+from pathlib import Path
 from typing import List
-from .parser import parse_feature_unit
-from .feature_unit import FeatureUnit
+from .feature_unit import FEATURE_UNITS, feature_unit
+
+@feature_unit(
+    belongs_to=["DevEngine"],
+    status="done",
+    display_name="Collect Feature Units",
+    notes="遞迴掃描 root_path，收集所有帶有 @unit 的方法並轉為 FeatureUnit"
+)
+def collect_feature_units(root_path: str):
+    """
+    root_path: 字串路徑，例如 "src" 或 "am_meta"
+    掃描該路徑下所有 .py 檔案，import 它們，並收集 FeatureUnit。
+    """
+
+    root = Path(root_path).resolve()
+
+    if not root.exists():
+        raise ValueError(f"Root path does not exist: {root}")
+
+    cwd_path = Path.cwd().resolve()
+
+    for py_file in root.rglob("*.py"):
+        module_name = _module_name_from_path(cwd_path, py_file)
+
+        if module_name in sys.modules:
+            continue
+
+        spec = importlib.util.spec_from_file_location(module_name, py_file)
+        if spec is None or spec.loader is None:
+            print(f"[collector] Could not load spec for {module_name}")
+            continue
+        module = importlib.util.module_from_spec(spec)
+
+        sys.modules[module_name] = module
+        try:
+            spec.loader.exec_module(module)
+        except Exception as e:
+            print(f"[collector] Failed to import {module_name}: {e}")
+
+    return list(FEATURE_UNITS.values())
 
 
-def file_to_module(root_path: str, file_path: str) -> str:
-    """
-    Convert a file path to a Python module path.
-    Example:
-      root_path = /project/am_project
-      file_path = /project/am_project/flows/login.py
-      → am_project.flows.login
-    """
-    rel = os.path.relpath(file_path, root_path)
-    no_ext = os.path.splitext(rel)[0]
-    parts = no_ext.split(os.sep)
+def _module_name_from_path(root: Path, file: Path) -> str:
+    rel = file.relative_to(root)
+    parts = rel.with_suffix("").parts
     return ".".join(parts)
 
-
-def collect_feature_units(root_path: str) -> List[FeatureUnit]:
+def collect_feature_units_by_package(package) -> List:
     """
-    Recursively scan root_path for .py files,
-    import modules, and collect FeatureUnits.
-    Only methods with @unit in docstring are collected.
+    掃描整個 package，import 所有 modules，
+    並從 FEATURE_UNITS registry 收集所有 FeatureUnit。
     """
-    units: List[FeatureUnit] = []
 
-    for dirpath, _, filenames in os.walk(root_path):
-        for fname in filenames:
-            if not fname.endswith(".py"):
-                continue
+    package_path = Path(package.__file__).parent
 
-            file_path = os.path.join(dirpath, fname)
-            module_path = file_to_module(root_path, file_path)
+    for module_info in pkgutil.walk_packages([str(package_path)], package.__name__ + "."):
+        module_name = module_info.name
 
-            try:
-                module = importlib.import_module(module_path)
-            except Exception:
-                continue  # skip modules that fail to import
+        # 避免重複 import
+        if module_name in globals().get("_imported_modules", set()):
+            continue
 
-            # Scan classes
-            for _, obj in inspect.getmembers(module, inspect.isclass):
-                for _, method in inspect.getmembers(obj, inspect.isfunction):
-                    fu = parse_feature_unit(method)
-                    if fu:
-                        units.append(fu)
+        globals().setdefault("_imported_modules", set()).add(module_name)
 
-            # Scan standalone functions
-            for _, func in inspect.getmembers(module, inspect.isfunction):
-                fu = parse_feature_unit(func)
-                if fu:
-                    units.append(fu)
+        try:
+            importlib.import_module(module_name)
+        except Exception as e:
+            print(f"[collector] Failed to import {module_name}: {e}")
 
-    return units
+    # registry 已經是 symbol-based，不會重複
+    return list(FEATURE_UNITS.values())

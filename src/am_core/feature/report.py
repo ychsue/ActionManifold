@@ -1,16 +1,26 @@
-from typing import List
+from typing import List, Optional
 from datetime import datetime
-from .graph import FeatureUnitGraph
-from .feature_unit import FeatureUnit
+from ..graph import FeatureUnitGraph
+from .feature_unit import FeatureUnit, feature_unit
 
-def generate_roadmap(graph: FeatureUnitGraph, filepath: str):
+@feature_unit(
+    belongs_to=["DevEngine"],
+    status="done",
+    display_name="Generate Development Roadmap",
+    depends=[FeatureUnitGraph, FeatureUnitGraph.development_order, FeatureUnitGraph.pending_critical_path],
+    notes="產生 roadmap.md，整合 overview / coverage / mainline / blockers / ready"
+)
+def generate_roadmap(graph: FeatureUnitGraph, filepath: str, kickoff: Optional[str] = None):
     """
     Generate a full roadmap.md file summarizing:
       - development overview
       - feature coverage
       - development order
-      - pending shortest path
+      - directed mainline (internal)
+      - weakly connected mainline (internal + external)
+      - mainline completion
       - pending critical path
+      - external dependencies
       - blocked units
       - ready units
     """
@@ -25,11 +35,25 @@ def generate_roadmap(graph: FeatureUnitGraph, filepath: str):
     ready = graph.ready_units()
     coverage = graph.feature_coverage()
 
-    # Try to compute paths
+    # Try to compute pending critical path
     try:
         pending_cp = graph.pending_critical_path()
     except Exception:
         pending_cp = []
+
+    # If kickoff is provided, compute mainlines
+    if kickoff:
+        directed_mainline = graph.directed_mainline(kickoff)
+        weak_mainline = graph.weakly_connected_mainline(kickoff)
+        external = graph.external_dependencies(kickoff)
+        completion = graph.mainline_completion(kickoff)
+        directed_cp = graph.directed_pending_critical_path(kickoff)
+    else:
+        directed_mainline = []
+        weak_mainline = []
+        external = set()
+        completion = None
+        directed_cp = []
 
     # Build markdown
     lines = []
@@ -74,9 +98,61 @@ def generate_roadmap(graph: FeatureUnitGraph, filepath: str):
     lines.append("")
 
     # ------------------------------------------------------------
-    # Pending critical path
+    # Directed mainline (internal)
     # ------------------------------------------------------------
-    lines.append("## 🔥 Current Critical Path (Pending Only)\n")
+    if kickoff:
+        lines.append(f"## 🛣 Directed Mainline (Internal Only)\nStart: **{kickoff}**\n")
+        if directed_mainline:
+            for uid in directed_mainline:
+                u = graph.units_by_id[uid]
+                lines.append(f"- {uid} ({u.status})")
+        else:
+            lines.append("No directed mainline found.\n")
+        lines.append("")
+
+        # Completion
+        lines.append("### 🎯 Mainline Completion\n")
+        # 若 completion 是 None，表示無法計算主線完成度
+        if completion is None:
+            lines.append("Cannot compute mainline completion due to dependency cycle.\n")
+        else:
+            lines.append(f"- **{completion*100:.1f}%** complete\n")
+        lines.append("")
+
+        # Directed pending critical path
+        lines.append("### 🔥 Directed Pending Critical Path\n")
+        if directed_cp:
+            for uid in directed_cp:
+                u = graph.units_by_id[uid]
+                lines.append(f"- {uid} ({u.status})")
+        else:
+            lines.append("No pending critical path.\n")
+        lines.append("")
+
+    # ------------------------------------------------------------
+    # Weakly connected mainline (internal + external)
+    # ------------------------------------------------------------
+    if kickoff:
+        lines.append("## 🌐 Weakly Connected Mainline (Internal + External)\n")
+        for uid in weak_mainline:
+            tag = "internal" if graph.is_internal(uid) else "external"
+            status = graph.units_by_id[uid].status if graph.is_internal(uid) else "unknown"
+            lines.append(f"- {uid} [{tag}] ({status})")
+        lines.append("")
+
+        # External dependencies
+        lines.append("### 🌍 External Dependencies\n")
+        if external:
+            for uid in external:
+                lines.append(f"- {uid}")
+        else:
+            lines.append("No external dependencies.\n")
+        lines.append("")
+
+    # ------------------------------------------------------------
+    # Pending critical path (global)
+    # ------------------------------------------------------------
+    lines.append("## 🔥 Global Pending Critical Path\n")
     if pending_cp:
         for uid in pending_cp:
             u = next(x for x in units if x.id == uid)

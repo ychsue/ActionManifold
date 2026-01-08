@@ -1,4 +1,6 @@
 from turtle import st
+
+from am_core.feature.feature_unit import feature_unit
 from .context import StateCtx, WorldCtx, CtxBus, OrchCtx
 from .orchestrator import Orchestrator
 from pathlib import Path
@@ -16,7 +18,14 @@ class StateMachine:
             "payload": payload,
         }
         self.orch.report(evt)
-        
+
+@feature_unit(
+    belongs_to=["RuntimeEngine"],
+    status="planned",
+    display_name="World Runner",
+    depends=[Orchestrator.run],
+    notes="建立 WorldCtx + root Orchestrator，執行整個世界並 dump 狀態"
+)        
 class WorldRunner(StateMachine):
     """
     對外：像一個 StateMachine（有 run / replay / resume）

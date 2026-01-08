@@ -1,10 +1,21 @@
 from inspect import isclass
+
+from am_core.feature.feature_unit import feature_unit
 from .leak_monitor import LeakMonitor, leak_orch_checked_run
 from .context import OrchCtx, StateCtx, CtxBus, WorldCtx
 from pathlib import Path
 from typing import Optional
 
+@feature_unit(
+    belongs_to=["RuntimeEngine"],
+    status="planned",
+    display_name="Orchestrator Execution",
+    notes="執行 playbook，驅動 StateMachine / 子 Orchestrator，並維護 OrchCtx"
+)
 class Orchestrator:
+    """
+    Orchestrator 負責依照 playbook 執行整個 workflow。
+    """
     playbook: dict
     def __init__(self, name, playbook: dict, parent_orch: Optional["Orchestrator"], worldCtx: WorldCtx, ctxBus: CtxBus):
         LeakMonitor.track_orchestrator(self)
