@@ -30,6 +30,10 @@ def collect_feature_units(root_path: str, pkg_path: Optional[str] = None) -> Lis
         pkg_dir = root
     else:
         pkg_dir = Path(pkg_path).resolve()
+        
+    # 將 pkg_dir 加入 sys.path，確保可以 import
+    if str(pkg_dir) not in sys.path:
+        sys.path.insert(0, str(pkg_dir))
 
     for py_file in root.rglob("*.py"):
         module_name = _module_name_from_path(pkg_dir, py_file)

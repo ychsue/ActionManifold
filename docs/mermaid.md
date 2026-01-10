@@ -3,7 +3,7 @@ graph TD
     am_core_feature_collector_collect_feature_units["Collect Feature Units"]
     style am_core_feature_collector_collect_feature_units fill:green,stroke:#333,stroke-width:1px
 style am_core_feature_collector_collect_feature_units fill:green,stroke:#000000,stroke-width:2px,color:#FFFFFF,font-weight:bold
-    am_core_graph_FeatureUnitGraph_directed_mainline["am_core graph FeatureUnitGraph directed_mainline"]
+    am_core_graph_FeatureUnitGraph_directed_mainline["直接主線"]
     style am_core_graph_FeatureUnitGraph_directed_mainline fill:green,stroke:#333,stroke-width:1px
 style am_core_graph_FeatureUnitGraph_directed_mainline fill:green,stroke:#000000,stroke-width:2px,color:#FFFFFF,font-weight:bold
     am_core_graph_FeatureUnitGraph_weakly_connected_mainline["am_core graph FeatureUnitGraph weakly_connected_mainline"]

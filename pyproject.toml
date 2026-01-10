@@ -7,10 +7,21 @@ authors = [
 ]
 readme = "README.md"
 requires-python = ">=3.10"
-dependencies = []
+dependencies = [
+    "fastapi",
+    "uvicorn[standard]",
+    "pydantic",
+    "click",
+    "importlib-metadata",
+    "networkx"
+]
 
 [project.optional-dependencies]
-dev = ["pytest"]
+dev = ["pytest", 
+    "pytest-asyncio",
+    "rich",
+    "python-dotenv"
+]
 
 # 這裡是重點：建立 am 指令
 [project.scripts]
