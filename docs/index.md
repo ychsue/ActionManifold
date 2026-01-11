@@ -1,166 +1,58 @@
+<meta name="htmx-config" content='{"selfRequestsOnly":false}'>
+# 🧭 ActionManifold Analysis Cockpit
+
+## Root Paths
+
+<form
+  hx-post="am://config/root_paths"
+  hx-target="#root-status"
+  hx-swap="innerHTML"
+>
+  <div id="root-path-list">
+    <!-- <input name="root_paths" placeholder="./src/features" /> -->
+    <mdui-text-field label="Root Path" name="root_paths" placeholder="./src/xxx"/>
+  </div>
+
+  <mdui-button-icon icon="add"
+        type="button"
+        hx-get="am://add-root-input"
+        hx-target="#root-path-list"
+        hx-swap="beforeend"
+  ></mdui-button-icon>
+
+  <mdui-button type="submit">Set Root Paths</mdui-button>
+</form>
+
+<div id="root-status"></div>
+
+歡迎來到 ActionManifold 的語義儀錶板。  
+這裡是整個 meta‑engine 的「駕駛艙」，你可以在這裡：
+
+- 檢視所有 FeatureUnits
+- 查看 dependency graph
+- 查詢某個 feature 的依賴
+- 執行 feature（design‑time）
+- 觀察輸出（未來可加入 runtime）
+
+所有操作都會在本頁面完成，不會跳轉到其他頁面。
+
 ---
-icon: lucide/rocket
----
 
-# Get started
+## 🚀 Commands
 
-For full documentation visit [zensical.org](https://zensical.org/docs/).
+以下按鈕會透過 Zensical plugin 呼叫 am‑server 的 API，並將結果顯示在下方的 `<am-output />` 區塊。
 
-## Commands
+### 🔍 Describe all FeatureUnits
+[Describe](am://describe)
 
-* [`zensical new`][new] - Create a new project
-* [`zensical serve`][serve] - Start local web server
-* [`zensical build`][build] - Build your site
+### 🕸 Dependency Graph
+[Graph](am://graph)
 
-  [new]: https://zensical.org/docs/usage/new/
-  [serve]: https://zensical.org/docs/usage/preview/
-  [build]: https://zensical.org/docs/usage/build/
+### 📦 Dependencies of a FeatureUnit
+請輸入 FeatureUnit
 
-## Examples
-
-### Admonitions
-
-> Go to [documentation](https://zensical.org/docs/authoring/admonitions/)
-
-!!! note
-
-    This is a **note** admonition. Use it to provide helpful information.
-
-!!! warning
-
-    This is a **warning** admonition. Be careful!
-
-### Details
-
-> Go to [documentation](https://zensical.org/docs/authoring/admonitions/#collapsible-blocks)
-
-??? info "Click to expand for more info"
-    
-    This content is hidden until you click to expand it.
-    Great for FAQs or long explanations.
-
-## Code Blocks
-
-> Go to [documentation](https://zensical.org/docs/authoring/code-blocks/)
-
-``` python hl_lines="2" title="Code blocks"
-def greet(name):
-    print(f"Hello, {name}!") # (1)!
-
-greet("Python")
-```
-
-1.  > Go to [documentation](https://zensical.org/docs/authoring/code-blocks/#code-annotations)
-
-    Code annotations allow to attach notes to lines of code.
-
-Code can also be highlighted inline: `#!python print("Hello, Python!")`.
-
-## Content tabs
-
-> Go to [documentation](https://zensical.org/docs/authoring/content-tabs/)
-
-=== "Python"
-
-    ``` python
-    print("Hello from Python!")
-    ```
-
-=== "Rust"
-
-    ``` rs
-    println!("Hello from Rust!");
-    ```
-
-## Diagrams
-
-> Go to [documentation](https://zensical.org/docs/authoring/diagrams/)
-
-``` mermaid
-graph LR
-  A[Start] --> B{Error?};
-  B -->|Yes| C[Hmm...];
-  C --> D[Debug];
-  D --> B;
-  B ---->|No| E[Yay!];
-```
-
-## Footnotes
-
-> Go to [documentation](https://zensical.org/docs/authoring/footnotes/)
-
-Here's a sentence with a footnote.[^1]
-
-Hover it, to see a tooltip.
-
-[^1]: This is the footnote.
-
-
-## Formatting
-
-> Go to [documentation](https://zensical.org/docs/authoring/formatting/)
-
-- ==This was marked (highlight)==
-- ^^This was inserted (underline)^^
-- ~~This was deleted (strikethrough)~~
-- H~2~O
-- A^T^A
-- ++ctrl+alt+del++
-
-## Icons, Emojis
-
-> Go to [documentation](https://zensical.org/docs/authoring/icons-emojis/)
-
-* :sparkles: `:sparkles:`
-* :rocket: `:rocket:`
-* :tada: `:tada:`
-* :memo: `:memo:`
-* :eyes: `:eyes:`
-
-## Maths
-
-> Go to [documentation](https://zensical.org/docs/authoring/math/)
-
-$$
-\cos x=\sum_{k=0}^{\infty}\frac{(-1)^k}{(2k)!}x^{2k}
-$$
-
-!!! warning "Needs configuration"
-    Note that MathJax is included via a `script` tag on this page and is not
-    configured in the generated default configuration to avoid including it
-    in a pages that do not need it. See the documentation for details on how
-    to configure it on all your pages if they are more Maths-heavy than these
-    simple starter pages.
-
-<script id="MathJax-script" async src="https://unpkg.com/mathjax@3/es5/tex-mml-chtml.js"></script>
-<script>
-  window.MathJax = {
-    tex: {
-      inlineMath: [["\\(", "\\)"]],
-      displayMath: [["\\[", "\\]"]],
-      processEscapes: true,
-      processEnvironments: true
-    },
-    options: {
-      ignoreHtmlClass: ".*|",
-      processHtmlClass: "arithmatex"
-    }
-  };
-</script>
-
-## Task Lists
-
-> Go to [documentation](https://zensical.org/docs/authoring/lists/#using-task-lists)
-
-* [x] Install Zensical
-* [x] Configure `zensical.toml`
-* [x] Write amazing documentation
-* [ ] Deploy anywhere
-
-## Tooltips
-
-> Go to [documentation](https://zensical.org/docs/authoring/tooltips/)
-
-[Hover me][example]
-
-  [example]: https://example.com "I'm a tooltip!"
+<!-- <script>
+    document.body.addEventListener('htmx:beforeRequest', function (evt) { 
+        console.log(`正在請求網址:${evt.detail.pathInfo.requestPath}`)
+    });
+</script> -->

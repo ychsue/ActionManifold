@@ -6,6 +6,8 @@ from fastapi import FastAPI, Form
 from fastapi.responses import HTMLResponse
 
 from typing import List
+
+from am_core.feature.feature_unit import feature_unit
 from .models import (
     FeatureUnitModel,
     GraphModel,
@@ -67,12 +69,14 @@ def run(feature: str):
         output=output,
         logs=logs,
     )
-    
+
+@feature_unit(status="done")
 @app.post("/config/root_paths")
 def set_root_paths(root_paths: List[str] = Form(...)):
     state.root_paths = [r for r in root_paths if r.strip()]
     return {"status": "ok", "root_paths": state.root_paths}
 
+@feature_unit(status="done")
 @app.get("/add-root-input")
 def add_root_input():
     return HTMLResponse('<mdui-text-field label="Root Path" name="root_paths"/>')
