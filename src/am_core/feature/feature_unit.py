@@ -1,7 +1,9 @@
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Callable, List, Optional, Tuple, Dict
 import inspect
+
+from .types import TimeExpr, TimeName4Unit
 
 # ---------------------------------------------------------
 # Identity key: (sourcefile, qualname)
@@ -20,8 +22,11 @@ class FeatureUnit:
     status: str = "pending"
     belongs_to: List[str] = field(default_factory=list)
     depends_on: List[Callable] = field(default_factory=list)  # symbol-based
-    due: Optional[datetime] = None
-    scheduled: Optional[datetime] = None
+    due: Optional[datetime|TimeExpr] = None
+    scheduled: Optional[datetime|TimeExpr] = None
+    duration: Optional[timedelta] = None
+    start: Optional[datetime] = None # computed
+    end: Optional[datetime] = None   # computed
     estimate: Optional[float] = None
     priority: Optional[int] = None
     notes: Optional[str] = None
@@ -43,8 +48,9 @@ def feature_unit(
     status: Optional[str] = None,
     belongs_to: Optional[List[str]] = None,
     depends: Optional[List[Callable]] = None,
-    due: Optional[datetime] = None,
-    scheduled: Optional[datetime] = None,
+    due: Optional[datetime|TimeExpr] = None,
+    scheduled: Optional[datetime|TimeExpr] = None,
+    duration: Optional[timedelta] = None,
     estimate: Optional[float] = None,
     priority: Optional[int] = None,
     notes: Optional[str] = None,
@@ -67,6 +73,7 @@ def feature_unit(
                 depends_on=depends,
                 due=due,
                 scheduled=scheduled,
+                duration=duration,
                 estimate=estimate,
                 priority=priority,
                 notes=notes,

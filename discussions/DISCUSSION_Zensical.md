@@ -3674,3 +3674,153 @@ def resolve_time(expr, graph):
 ### [ ] ✔ 設計 AM runtime 的 scheduling model  
 
 你想先做哪一塊？
+
+==========================================================================
+# [2026-01-10] ychsue 寫出start & end time 的邏輯
+你問到的這個點非常關鍵，而且這正是「語義排程器」與「實際資料不完整」之間的交界處。  
+你的直覺是對的，但我們要更精準地定義「什麼叫做資訊不足」。
+
+我把整件事拆成三層，你會立刻看懂 AM 應該怎麼做。
+
+---
+
+# 🌟 **結論先講：  
+如果 AM 無法推論出 start / end → 就應該是 `None`。**
+
+但這不是隨便給 None，而是有語義的 None：
+
+> **None = 無法推論（insufficient semantic information）**
+
+這和「尚未開始」或「未知」是不同語義。
+
+---
+
+# 🧩 1. 什麼叫做「資訊不足」？
+
+以下情況都算資訊不足：
+
+### ✔ 沒有 scheduled  
+### ✔ 沒有 due  
+### ✔ 沒有 duration  
+### ✔ 沒有任何 depends（無法從依賴推導）  
+### ✔ 有相對時間，但引用的單位也沒有時間  
+### ✔ 有 depends，但 depends 的 end 也推不出來  
+### ✔ 有 scheduled，但是語義表達式，無法展開  
+### ✔ 有 duration，但無法推導 scheduled  
+### ✔ 有 due，但無法推導 scheduled 或 duration  
+
+這些情況下，AM 的時間解析器會發現：
+
+> **無法形成一個封閉的時間語義系統**
+
+這時 start / end 就應該是 None。
+
+---
+
+# 🧩 2. 為什麼不能亂給預設值（例如 0、1970、今天）？
+
+因為那會破壞語義。
+
+例如：
+
+- 1970-01-01 → 會讓 Gantt 圖亂掉  
+- 今天 → 會讓 timeline 變成假資訊  
+- 0 → 不是合法 datetime  
+- 自動填入 → 會讓 AI 推論錯誤  
+
+AM 是語義引擎，不是 UI 工具。  
+語義不完整時，應該明確表示「無法推論」。
+
+---
+
+# 🧩 3. 那麼 start / end = None 時，Gantt / timeline 要怎麼處理？
+
+這是 AM 的責任，不是 Mermaid 的責任。
+
+Mermaid 不接受 None，所以 AM 要做：
+
+### ✔ 在輸出 Gantt 時跳過該任務  
+或  
+### ✔ 標記為「未排程」  
+
+例如：
+
+```
+%% 未排程的任務
+section 未排程
+設計 Meta Self Description :crit, 0, 0
+```
+
+或：
+
+```
+%% 跳過
+```
+
+你可以選擇策略，但語義上 start/end = None 是正確的。
+
+---
+
+# 🧩 4. 這樣做的語義好處
+
+### ✔ 1. 清楚區分「未排程」與「已排程」  
+### ✔ 2. 不會產生假資料  
+### ✔ 3. AI 可以根據 None 推論「缺少資訊」  
+### ✔ 4. timeline / gantt 不會亂掉  
+### ✔ 5. runtime 可以補上 created_at / completed_at  
+### ✔ 6. 未來可以做「自動排程」  
+
+None 其實是語義的一部分。
+
+---
+
+# 🌟 5. 我幫你定義 AM 的時間語義規則（正式版）
+
+## **start / end 的推導規則**
+
+```
+if scheduled and duration:
+    start = resolve(scheduled)
+    end = start + resolve(duration)
+
+elif scheduled and due:
+    start = resolve(scheduled)
+    end = resolve(due)
+
+elif duration and depends:
+    start = max(dep.end for dep in depends)
+    end = start + resolve(duration)
+
+elif due and duration:
+    end = resolve(due)
+    start = end - resolve(duration)
+
+else:
+    start = None
+    end = None
+```
+
+這是完整的語義。
+
+---
+
+# 🌟 6. 最後一句話（最重要）
+
+> **start / end = None 是語義正確的結果，  
+> 表示「AM 無法推論出計畫時間」。**
+
+這不是錯誤，而是語義上的「未知」。
+
+這會讓 AM 的 timeline、gantt、AI 推論、runtime scheduling 都保持一致性。
+
+---
+
+如果你願意，我可以幫你：
+
+### [ ] ✔ 寫完整的 resolve_unit_times()  
+### [ ] ✔ 寫 Gantt 輸出器（自動跳過 None）  
+### [ ] ✔ 寫 timeline 輸出器  
+### [ ] ✔ 寫「未排程任務」區塊  
+### [ ] ✔ 寫 CLI：`am gantt` / `am timeline`  
+
+你想先補哪一塊？
