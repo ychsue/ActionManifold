@@ -1,3 +1,4 @@
+import datetime
 from math import e
 from types import FunctionType
 import networkx as nx
@@ -36,7 +37,20 @@ class FeatureUnitGraph:
         self.units = units
         self.units_by_id: Dict[str, FeatureUnit] = {u.id: u for u in units}
         self.graph = nx.DiGraph()
+        self._resolve_times()
         self._build_graph()
+
+    def _resolve_times(self):
+        """Resolve times for all units using resolve_unit_times"""
+        from .feature.resolve_time import resolve_unit_times
+        for unit in self.units:
+            try:
+                resolve_unit_times(unit, self)
+            except Exception as e:
+                # 如果解析失敗，設置為 None
+                unit.start = None
+                unit.end = None
+                print(f"Warning: Failed to resolve times for unit {unit.id}: {e}")
 
     def to_mermaid(self, for_markdown: bool = True) -> str:
         if for_markdown:
@@ -72,6 +86,98 @@ class FeatureUnitGraph:
         if for_markdown:
             lines.append("```")
         return "\n".join(lines)
+
+    def to_mermaid_timeline(self, pending=False, for_markdown: bool = True) -> str:
+        """Generate Mermaid timeline diagram"""
+        units = self.units
+        if pending:
+            units = [u for u in units if u.status != "done"]
+
+        # 分離有完整時間的單位和沒有完整時間的單位
+        units_with_times = [u for u in units if u.start and u.end]
+        units_without_times = [u for u in units if not (u.start and u.end)]
+
+        content_lines = []
+
+        if for_markdown:
+            content_lines.append("```mermaid")
+        content_lines.append("timeline")
+        content_lines.append("    title FeatureUnit Timeline" + (" (Pending Only)" if pending else ""))
+
+        if units_with_times:
+            # 按 start 日期排序
+            units_with_times.sort(key=lambda u: u.start or datetime.datetime.min) # 防止 NoneType 錯誤，但因為是篩選過的，理論上不會發生
+
+            for u in units_with_times:
+                if u.start is None or u.end is None:
+                    print("Warning: Unit with incomplete time found in units_with_times")
+                    continue  # 安全檢查，理論上不會發生
+                section_name = f"{u.start.strftime('%Y-%m-%d')} to {u.end.strftime('%Y-%m-%d')}"
+                content_lines.append(f"    section {section_name}")
+                content_lines.append(f"        {u.effective_name} : {u.status}")
+        else:
+            content_lines.append("    section No Data")
+            content_lines.append("        No units with complete start and end dates")
+
+        if for_markdown:
+            content_lines.append("```")
+
+        # 添加沒有完整時間的單位列表
+        if units_without_times:
+            content_lines.append("")
+            content_lines.append("## Units without complete time information:")
+            for u in units_without_times:
+                start_info = f"start: {u.start.strftime('%Y-%m-%d')}" if u.start else "start: N/A"
+                end_info = f"end: {u.end.strftime('%Y-%m-%d')}" if u.end else "end: N/A"
+                content_lines.append(f"- {u.effective_name} ({u.status}): {start_info}, {end_info}")
+
+        return "\n".join(content_lines)
+
+    def to_mermaid_gantt(self, pending=False, for_markdown: bool = True) -> str:
+        """Generate Mermaid Gantt chart"""
+        units = self.units
+        if pending:
+            units = [u for u in units if u.status != "done"]
+
+        # 分離有完整時間的單位和沒有完整時間的單位
+        units_with_times = [u for u in units if u.start and u.end]
+        units_without_times = [u for u in units if not (u.start and u.end)]
+
+        content_lines = []
+
+        if for_markdown:
+            content_lines.append("```mermaid")
+        content_lines.append("gantt")
+        content_lines.append("    title FeatureUnit Gantt Chart" + (" (Pending Only)" if pending else ""))
+        content_lines.append("    dateFormat YYYY-MM-DD")
+
+        if units_with_times:
+            # 按 start 日期排序
+            units_with_times.sort(key=lambda u: u.start or datetime.datetime.min) # 防止 NoneType 錯誤，但因為是篩選過的，理論上不會發生
+
+            for u in units_with_times:
+                if u.start is None or u.end is None:
+                    print("Warning: Unit with incomplete time found in units_with_times")
+                    continue  # 安全檢查，理論上不會發生
+                status = u.status
+                content_lines.append(f"    {u.effective_name} : {status}, {u.start.strftime('%Y-%m-%d')}, {u.end.strftime('%Y-%m-%d')}")
+        else:
+            content_lines.append("    No data : done, 2024-01-01, 2024-01-02")
+
+        if for_markdown:
+            content_lines.append("```")
+
+        # 添加沒有完整時間的單位列表
+        if units_without_times:
+            content_lines.append("")
+            content_lines.append("## Units without complete time information:")
+            for u in units_without_times:
+                start_info = f"start: {u.start.strftime('%Y-%m-%d')}" if u.start else "start: N/A"
+                end_info = f"end: {u.end.strftime('%Y-%m-%d')}" if u.end else "end: N/A"
+                content_lines.append(f"- {u.effective_name} ({u.status}): {start_info}, {end_info}")
+
+        return "\n".join(content_lines)
+
     # ------------------------------------------------------------
     # Build graph
     # ------------------------------------------------------------

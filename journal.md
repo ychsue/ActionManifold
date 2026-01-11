@@ -1,3 +1,5 @@
+# [2026-01-11] 已經請Grok 簡單寫了，正要測
+
 # [2026-01-11] Gantt 圖需要的時間宣告法Copilot 提出，然後Grok幫忙完整
 - [ ] 下一步，使 timeline, gantt 與 graph 可以輸出 mermaid 格式
 

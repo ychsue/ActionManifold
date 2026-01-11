@@ -4,9 +4,10 @@ import importlib.util
 import pkgutil
 from pathlib import Path
 from typing import List
+from types import FunctionType
 
 from git import Optional
-from .feature_unit import FEATURE_UNITS, feature_unit
+from .feature_unit import FEATURE_UNITS, FeatureUnit, feature_unit, get_fn_key
 
 @feature_unit(
     belongs_to=["DevEngine"],
@@ -54,6 +55,17 @@ def collect_feature_units(root_path: str, pkg_path: Optional[str] = None) -> Lis
             print(f"[collector] Failed to import {module_name}: {e}")
 
     return list(FEATURE_UNITS.values())
+
+def get_FU_by_fn(fn:FunctionType, units: List[FeatureUnit]) -> Optional[FeatureUnit]:
+    """
+    根據函式物件取得對應的 FeatureUnit。
+    如果找不到，回傳 None。
+    """
+    for fu in units:
+        if get_fn_key(fu.fn) == get_fn_key(fn):
+            return fu
+    return None
+
 
 
 def _module_name_from_path(root: Path, file: Path) -> str:

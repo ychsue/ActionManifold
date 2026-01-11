@@ -5,7 +5,7 @@ from pathlib import Path
 from fastapi import FastAPI, Form
 from fastapi.responses import HTMLResponse
 
-from typing import List
+from typing import List, Optional
 
 from am_core.feature.feature_unit import feature_unit
 from .models import (
@@ -45,6 +45,7 @@ def list_commands():
             {"name": "graph", "summary": "Return dependency graph"},
             {"name": "deps", "summary": "List dependencies of a FeatureUnit"},
             {"name": "run", "summary": "Run a FeatureUnit"},
+            {"name": "generate-md", "summary": "Generate .md file with various formats"},
         ]
     }
 
@@ -70,10 +71,32 @@ def run(feature: str):
         logs=logs,
     )
 
+@app.post("/generate-md")
+def generate_md(command: str, output_path: str, start: Optional[str] = None, kickoff: Optional[str] = None):
+    """
+    生成 .md 檔案的 API 端點
+    - command: roadmap, mermaid, timeline, gantt, mainline
+    - output_path: 輸出檔案路徑
+    - start: 對於 mainline 命令的起始節點
+    - kickoff: 對於 roadmap 命令的 kickoff 節點
+    """
+    try:
+        kwargs = {}
+        if start:
+            kwargs["start"] = start
+        if kickoff:
+            kwargs["kickoff"] = kickoff
+        
+        result = engine.generate_md(command, output_path, **kwargs)
+        return {"status": "success", "message": result}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
 @feature_unit(status="done")
 @app.post("/config/root_paths")
 def set_root_paths(root_paths: List[str] = Form(...)):
     state.root_paths = [r for r in root_paths if r.strip()]
+    engine.set_root_paths(state.root_paths)
     return {"status": "ok", "root_paths": state.root_paths}
 
 @feature_unit(status="done")
