@@ -2,7 +2,7 @@
 任務(Action)在事件與時間中所能展開的所有可能路徑的流形
 
 ---
-首先，這個部分是 [超導般的社會](https://ychsue.github.io/superconductorlike_socitety/) 裡需要的一部份。
+首先，這個部分是 [超導般的社會](https://ychsue.github.io/superconductorlike_society/) 裡需要的一部份。
 
 主要是因為若要能夠讓 AI Agent 能夠handle 人們的活動，然後根據活動數據持續優化或者擴充，甚至能夠 replay 與 resume 的話，那就需要有一些定好的協定。
 
