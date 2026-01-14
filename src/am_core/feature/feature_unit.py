@@ -2,6 +2,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from typing import Callable, List, Optional, Tuple, Dict
 import inspect
+import builtins
 
 from .types import TimeExpr, TimeName4Unit
 
@@ -38,8 +39,14 @@ class FeatureUnit:
     def effective_name(self):
         return self.display_name or f"{self.fn.__module__}.{self.fn.__qualname__}"
     
-FEATURE_UNITS: Dict[Tuple[Optional[str], str], FeatureUnit] = {}
+# 使用 builtins 避免 reload 重置
+if not hasattr(builtins, 'FEATURE_UNITS'):
+    builtins.FEATURE_UNITS: Dict[Tuple[Optional[str], str], FeatureUnit] = {}  # type: ignore[attr-defined]
+FEATURE_UNITS: Dict[Tuple[Optional[str], str], FeatureUnit] = builtins.FEATURE_UNITS  # type: ignore[attr-defined]
 
+if not hasattr(builtins, 'IMPORTED_FEATURE_UNIT_MODULES'):
+    builtins.IMPORTED_FEATURE_UNIT_MODULES: set = set()  # type: ignore[attr-defined]
+IMPORTED_FEATURE_UNIT_MODULES: set = builtins.IMPORTED_FEATURE_UNIT_MODULES  # type: ignore[attr-defined]
 
 def feature_unit(
     *,
@@ -60,6 +67,9 @@ def feature_unit(
     depends = depends or []
 
     def decorator(fn):
+        # 在還沒有正式開始collecting之前，不要註冊feature units
+        if len(IMPORTED_FEATURE_UNIT_MODULES) == 0:
+            return fn
         key = get_fn_key(fn)
         unit_id = id or f"{fn.__module__}.{fn.__qualname__}"
 
@@ -79,6 +89,11 @@ def feature_unit(
                 notes=notes,
                 weight=weight,
             )
+            print(f"Created FeatureUnit: {unit_id}")  # Add this line
+        else:
+            print(f"FeatureUnit already exists: {unit_id}")  # Add this line
+        print(f"Current FEATURE_UNITS length: {len(FEATURE_UNITS)}")  # Add this line
+
         return fn
 
     return decorator

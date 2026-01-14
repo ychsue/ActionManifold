@@ -1,4 +1,5 @@
 <meta name="htmx-config" content='{"selfRequestsOnly":false}'>
+<script src="javascripts/config.js"></script>
 # 🧭 ActionManifold Analysis Cockpit
 
 ## Root Paths
@@ -21,6 +22,20 @@
   ></mdui-button-icon>
 
   <mdui-button type="submit">Set Root Paths</mdui-button>
+</form>
+
+<form
+  hx-post="am://generate-md"
+  hx-target="#root-status"
+  hx-swap="innerHTML"
+>
+  <div style='display: flex; flex-wrap: wrap; width: 100%; gap: 10px;'>
+    <mdui-text-field style='flex: 1 1 auto; min-width: 150px; width:12%;' name="cmd" label="command" value="roadmap"></mdui-text-field>
+    <mdui-text-field style='flex: 1 1 auto; min-width: 150px; width:12%;' name="output_path" label="output_path" value=""></mdui-text-field>
+    <mdui-text-field style='flex: 1 1 auto; min-width: 150px; width:12%;' name="start" label="start" value="kickoff"></mdui-text-field>
+    <mdui-text-field style='flex: 1 1 auto; min-width: 150px; width:12%;' name="kickoff" label="kickoff" value="kickoff"></mdui-text-field>
+  </div>
+  <mdui-button type="submit">Roadmap</mdui-button>
 </form>
 
 <div id="root-status"></div>

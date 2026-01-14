@@ -1,6 +1,6 @@
 // docs/javascripts/am_protocol_handler.js
 // 攔截 htmx 請求，將 am:// 協議轉換為代理路徑改成am_server 的 URL
-am_server_url = "http://localhost:7000";
+// am_server_url 從 config.js 讀取
 document.body.addEventListener("htmx:configRequest", function (e) {
   const url = e.detail.path;
 
@@ -27,15 +27,15 @@ document.addEventListener("click", function (e) {
   handleAM(url);
 });
 
-// 攔截所有 form submit
-document.addEventListener("submit", function (e) {
-  const form = e.target;
-  const action = form.getAttribute("action");
-  if (!action || !action.startsWith("am://")) return;
+// // 攔截所有 form submit
+// document.addEventListener("submit", function (e) {
+//   const form = e.target;
+//   const action = form.getAttribute("hx-post") || form.getAttribute("action");
+//   if (!action || !action.startsWith("am://")) return;
 
-  e.preventDefault();
-  handleAM(action, new FormData(form));
-});
+//   e.preventDefault();
+//   handleAM(action, new FormData(form));
+// });
 
 // 通用處理器
 function handleAM(amUrl, formData) {

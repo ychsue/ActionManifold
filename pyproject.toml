@@ -1,6 +1,6 @@
 [project]
 name = "am-core"
-version = "0.1.0"
+version = "0.1.1"
 description = "ActionManifold Core Development Semantics Engine"
 authors = [
     { name = "Young-Chung Hsue" }

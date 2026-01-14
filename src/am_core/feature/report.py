@@ -182,7 +182,8 @@ def generate_roadmap(graph: FeatureUnitGraph, filepath: str, kickoff: Optional[s
         for uid, deps in blocked.items():
             lines.append(f"- **{uid}** blocked by:")
             for d in deps:
-                lines.append(f"  - {d}")
+                stBlocked = f"  - {d}".replace("<", "&lt;").replace(">", "&gt;")
+                lines.append(stBlocked)
     else:
         lines.append("No blocked units.\n")
 

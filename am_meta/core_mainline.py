@@ -57,7 +57,7 @@ class AMCoreMainline:
         depends=[main_kickoff],
         notes="設計 AM CLI 的指令語意（roadmap / mainline / graph / timeline / gantt）",
         scheduled=datetime(2026, 1, 10),
-        duration=timedelta(days=7),
+        duration=timedelta(days=8),
     )
     def design_cli(self):
         pass
@@ -69,7 +69,6 @@ class AMCoreMainline:
         status="planned",
         depends=[design_cli],
         notes="實作 CLI 並串接 FeatureUnitGraph / report / visualize",
-        scheduled=datetime(2026, 1, 17),
         duration=timedelta(days=10),
     )
     def implement_cli(self):
@@ -95,7 +94,7 @@ class AMCoreMainline:
         status="imagined",
         depends=[implement_feature_unit_graph],
         notes="未來支援 PyVis / Cytoscape.js 的互動式語意圖",
-        scheduled=datetime(2026, 2, 1),
+        scheduled=(design_meta_self_description,"end",4),
         duration=timedelta(days=14),
     )
     def future_interactive_graph(self):

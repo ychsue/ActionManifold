@@ -63,11 +63,14 @@
 4. **程式碼測試**：確認所有修改的檔案都能成功匯入，無語法錯誤。
 
 ### 待完成或待改進
-1. **API 整合測試**：尚未實際測試 /generate-md 端點是否能正確生成包含時間資訊的 .md 檔案。
-2. **Zensical 整合**：需要確認生成的 .md 檔案（包含 Mermaid 圖表和時間資訊列表）能被 Zensical 正確顯示。
-3. **錯誤處理**：時間解析失敗時的處理可以更優雅，目前只是簡單設置為 None 並印出警告。
-4. **更多 Mermaid 支援**：state machine 等其他格式的 Mermaid 輸出。
-5. **CLI 升級**：cli.py 可能需要調整以支援更多 .md 輸出選項。
+1. [ ] **API 整合測試**：尚未實際測試 /generate-md 端點是否能正確生成包含時間資訊的 .md 檔案。
+2. [ ] **Zensical 整合**：需要確認生成的 .md 檔案（包含 Mermaid 圖表和時間資訊列表）能被 Zensical 正確顯示。
+3. [ ] **錯誤處理**：時間解析失敗時的處理可以更優雅，目前只是簡單設置為 None 並印出警告。
+4. [ ] **更多 Mermaid 支援**：state machine 等其他格式的 Mermaid 輸出。
+5. [ ] **CLI 升級**：cli.py 可能需要調整以支援更多 .md 輸出選項。
 
 ### 下一步建議
 建議測試 /generate-md API 端點，並從 index.md 呼叫它生成範例 .md 檔案，然後確認 Zensical 能正確顯示。
+
+# [2026-01-11] ychsue 討論 04
+好，我們來測試 /generate-md API 端點，並從 index.md 呼叫它生成範例 .md 檔案，然後確認 Zensical 能正確顯示。請問我要怎麼做呢？

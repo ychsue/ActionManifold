@@ -29,7 +29,16 @@ def resolve_time(expr: TimeExpr, graph: FeatureUnitGraph):
     else:
         ref_unit = graph.units_by_id[fun_or_id]
 
+    # 取得基準時間
+    ## 如果ref_unit 的 'due', 'scheduled' 與 'duration' 皆為 None，則無法計算
+    if all(getattr(ref_unit, attr) is None for attr in ["due", "scheduled", "duration"]):
+        raise ValueError(f"Reference unit {ref_unit.id} has no valid time attributes.")
+    ## 取得基準時間欄位，但他有可能還沒算過而取得 start / end
     base_time = getattr(ref_unit, field_name)
+    if field_name in ["start", "end"] and base_time is None:
+        # 確保該單位的時間已經被解析過
+        resolve_unit_times(ref_unit, graph)
+        base_time = getattr(ref_unit, field_name)
     if not isinstance(base_time, datetime):
         raise TypeError(f"Field '{field_name}' is not a datetime: {base_time}")
 
@@ -80,7 +89,7 @@ def resolve_unit_times(unit: FeatureUnit, graph: FeatureUnitGraph, visited=None)
 
     # 規則 1：scheduled + duration → due
     if scheduled and duration:
-        if due:
+        if due and due != scheduled + duration:
             # 已有 due，警告
             logging.warning(f"Unit {unit.id} already has due date set. Overwriting due date.")
         due = scheduled + duration

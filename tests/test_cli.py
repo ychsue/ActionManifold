@@ -2,29 +2,8 @@ import pytest
 import tempfile
 from pathlib import Path
 from click.testing import CliRunner
-from am_core.cli import mermaid, build_graph_from_root
+from am_core.cli import build_graph_from_root
 from am_core.feature.feature_unit import FEATURE_UNITS
-
-
-def test_cli_mermaid_single_root():
-    """Test mermaid command with single root."""
-    FEATURE_UNITS.clear()
-
-    with tempfile.TemporaryDirectory() as temp_dir:
-        test_file = Path(temp_dir) / "test.py"
-        test_file.write_text("""
-from am_core.feature.feature_unit import feature_unit
-
-@feature_unit(id="cli_unit")
-def cli_func():
-    pass
-""")
-
-        runner = CliRunner()
-        result = runner.invoke(mermaid, ["--root", temp_dir, "--pkg_path", temp_dir, "--output", "output.md"])
-        assert result.exit_code == 0
-        assert "Mermaid graph saved to output.md" in result.output
-        assert Path("output.md").exists()
 
 
 def test_cli_mermaid_multiple_roots():

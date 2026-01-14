@@ -41,11 +41,12 @@
             "request": "launch",
             // "program": "${workspaceFolder}/src/am_core/cli.py",
             "module": "src.am_core.cli",
-            // "args": ["roadmap", "--root", "./src/am_core", "--output", "core_roadmap.md"],
+            "args": ["dump-all-dev-mds", "--root", "./src/am_core", "--root", "./am_meta", "--pkg_path", "./"],
+            // "args": ["dump-all-dev-mds", "--root", "./am_meta/core_mainline.py", "--pkg_path", "./"],
             // "args": ["graph", "--root", "./src/am_core"],
             // "args": ["mermaid", "--root", "./am_meta", "--output", "meta_zen_report.md"],
             // "args": ["mermaid", "--root", "./src/am_core", "--pkg_path", "./", "--output", "core_zen_report.md"],
-            "args": ["mainline", "--root", "./am_meta", "--pkg_path", "./", "--start", "main_kickoff"],
+            // "args": ["mainline", "--root", "./am_meta", "--pkg_path", "./", "--start", "main_kickoff"],
         }
     ]
 }

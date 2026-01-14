@@ -5,7 +5,7 @@ from pathlib import Path
 from fastapi import FastAPI, Form
 from fastapi.responses import HTMLResponse
 
-from typing import List, Optional
+from typing import List, Optional, Annotated
 
 from am_core.feature.feature_unit import feature_unit
 from .models import (
@@ -72,7 +72,7 @@ def run(feature: str):
     )
 
 @app.post("/generate-md")
-def generate_md(command: str, output_path: str, start: Optional[str] = None, kickoff: Optional[str] = None):
+def generate_md(cmd: Annotated[str, Form()], output_path: Annotated[Optional[str], Form()] = None, start: Annotated[Optional[str], Form()] = None, kickoff: Annotated[Optional[str], Form()] = None):
     """
     生成 .md 檔案的 API 端點
     - command: roadmap, mermaid, timeline, gantt, mainline
@@ -82,12 +82,14 @@ def generate_md(command: str, output_path: str, start: Optional[str] = None, kic
     """
     try:
         kwargs = {}
-        if start:
-            kwargs["start"] = start
-        if kickoff:
-            kwargs["kickoff"] = kickoff
+        cmd = cmd or "roadmap"
+        kwargs["start"] = start or "design_main_kickoff"
+        kwargs["kickoff"] = kickoff or "design_main_kickoff"
+            
+        if output_path is None or output_path.strip() == "":
+            output_path = f"docs/output_{cmd}.md"
         
-        result = engine.generate_md(command, output_path, **kwargs)
+        result = engine.generate_md(cmd, output_path, **kwargs)
         return {"status": "success", "message": result}
     except Exception as e:
         return {"status": "error", "message": str(e)}
@@ -103,3 +105,7 @@ def set_root_paths(root_paths: List[str] = Form(...)):
 @app.get("/add-root-input")
 def add_root_input():
     return HTMLResponse('<mdui-text-field label="Root Path" name="root_paths"/>')
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="127.0.0.1", port=7000)

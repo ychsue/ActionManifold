@@ -26,8 +26,9 @@ This CLI automatically:
 - Generates reports and visualizations
 """
 
-from typing import Optional
+from typing import List, Optional
 import click
+from traitlets import default
 from .feature.collector import collect_feature_units
 from .feature.feature_unit import feature_unit
 from .graph import FeatureUnitGraph
@@ -48,156 +49,129 @@ def build_graph_from_root(root_paths: list[str], pkg_path: Optional[str] = None)
         units.extend(collect_feature_units(root_path, pkg_path=pkg_path))
     return FeatureUnitGraph(units)
 
-
-# ------------------------------------------------------------
-# Commands
-# ------------------------------------------------------------
-def cmd_roadmap(args):
-    graph = build_graph_from_root(args.root)
-    generate_roadmap(graph, args.output, kickoff=args.kickoff)
-    print(f"✅ Roadmap generated at {args.output}")
-
-
-def cmd_graph(args):
-    graph = build_graph_from_root(args.root)
-    graph.visualize(pending=args.pending)
-
-
-def cmd_timeline(args):
-    graph = build_graph_from_root(args.root)
-    visualize_timeline(graph, pending=args.pending)
-
-
-def cmd_gantt(args):
-    graph = build_graph_from_root(args.root)
-    visualize_gantt(graph, pending=args.pending)
-
-def cmd_mainline(args):
-    graph = build_graph_from_root(args.root)
-    start = args.start
-
-    directed = graph.directed_mainline(start)
-    weak = graph.weakly_connected_mainline(start)
-    completion = graph.mainline_completion(start)
-    critical = graph.directed_pending_critical_path(start)
-    external = graph.external_dependencies(start)
-
-    print(f"# Directed mainline (internal only) from {start}")
-    for u in directed:
-        print(f"  - {u} [{graph.units_by_id[u].status}]")
-
-    print(f"\nCompletion (internal mainline): {completion*100:.1f}%")
-
-    print(f"\nDirected pending critical path (internal):")
-    if critical:
-        for u in critical:
-            print(f"  -> {u} [{graph.units_by_id[u].status}]")
-    else:
-        print("  (no pending critical path)")
-
-    print(f"\nWeakly connected mainline (internal + external) from {start}:")
-    for u in weak:
-        tag = "internal" if graph.is_internal(u) else "external"
-        status = graph.units_by_id[u].status if graph.is_internal(u) else "unknown"
-        print(f"  - {u} [{tag}] [{status}]")
-
-    print(f"\nExternal dependencies in this component:")
-    if external:
-        for u in external:
-            print(f"  - {u}")
-    else:
-        print("  (none)")
-
-
-# ------------------------------------------------------------
-# mermaid output
-# ------------------------------------------------------------
-@cli.command()
-@click.option("--root", multiple=True, required=True, help="Root paths to scan")
-@click.option("--pkg_path", default=None, help="Package root path for module naming")
-@click.option("--output", default="mermaid.md")
-def mermaid(root, pkg_path, output):
-    """Generate Mermaid dependency graph"""
-    graph = build_graph_from_root(root, pkg_path=pkg_path)
-    if output:
-        with open(output, "w") as f:
-            f.write(graph.to_mermaid())
-        click.echo(f"✅ Mermaid graph saved to {output}")
-    else:
-        print(graph.to_mermaid())
-
+def find_kickoff_node_id(graph: FeatureUnitGraph, start_suffix: str) -> str:
+    matched_ids = [uid for uid in graph.units_by_id.keys() if uid.endswith(start_suffix)]
+    if not matched_ids:
+        raise ValueError(f"No kickoff node ID ends with '{start_suffix}'")
+    if len(matched_ids) > 1:
+        raise ValueError(f"Multiple kickoff node IDs end with '{start_suffix}': {matched_ids}")
+    return matched_ids[0]
 
 # ------------------------------------------------------------
 # roadmap
 # ------------------------------------------------------------
+def cmd_roadmap(root, pkg_path, output, kickoff):
+    """Generate roadmap.md"""
+    graph = build_graph_from_root(root, pkg_path=pkg_path)
+    try:
+        kickoff_id = find_kickoff_node_id(graph, kickoff or "kickoff")
+        generate_roadmap(graph, output, kickoff=kickoff_id)
+        click.echo(f"✅ Roadmap generated at {output}")
+    except ValueError as e:
+        click.echo(f"❌ roadmap Error: {e}")
+
 @cli.command()
 @click.option("--root", multiple=True, required=True)
 @click.option("--pkg_path", default=None, help="Package root path for module naming")
-@click.option("--output", default="roadmap.md")
+@click.option("--output", default="docs/roadmap.md")
 @click.option("--kickoff", default=None)
 def roadmap(root, pkg_path, output, kickoff):
     """Generate roadmap.md"""
+    cmd_roadmap(root, pkg_path, output, kickoff)
+
+
+# ------------------------------------------------------------
+# dependency graph
+# ------------------------------------------------------------
+def cmd_dependency(root, pkg_path, pending, output):
+    """Visualize dependency graph"""
     graph = build_graph_from_root(root, pkg_path=pkg_path)
-    generate_roadmap(graph, output, kickoff=kickoff)
-    click.echo(f"✅ Roadmap generated at {output}")
+    if output:
+        content = graph.to_mermaid()
+        if output == "str":
+            click.echo(content)
+            return content
+        with open(output, "w", encoding="utf-8") as f:
+            f.write(content)
+            click.echo(f"✅ Graph saved to {output}")
+    else:
+        graph.visualize(pending=pending)
 
-
-# ------------------------------------------------------------
-# graph
-# ------------------------------------------------------------
 @cli.command()
 @click.option("--root", multiple=True, required=True)
 @click.option("--pkg_path", default=None, help="Package root path for module naming")
 @click.option("--pending", is_flag=True)
-def graph(root, pkg_path, pending):
+@click.option("--output", default="docs/graph.md", help="If specified and not 'str', save markdown to this file. If it is 'str', print to console")
+def dependency(root, pkg_path, pending, output):
     """Visualize dependency graph"""
-    graph = build_graph_from_root(root, pkg_path=pkg_path)
-    graph.visualize(pending=pending)
-
-
+    return cmd_dependency(root, pkg_path, pending, output)
 # ------------------------------------------------------------
 # timeline
 # ------------------------------------------------------------
+def cmd_timeline(root, pkg_path, pending, output):
+    """Visualize timeline"""
+    graph = build_graph_from_root(root, pkg_path=pkg_path)
+    if output:
+        # 將 timeline 輸出到 .md
+        content = "# Timeline\n\n"
+        content += graph.to_mermaid_timeline(pending=pending)
+        if output == "str":
+            click.echo(content)
+            return content
+        with open(output, "w", encoding="utf-8") as f:
+            f.write(content)
+        click.echo(f"✅ Timeline saved to {output}")
+    else:
+        visualize_timeline(graph, pending=pending)
+
 @cli.command()
 @click.option("--root", multiple=True, required=True)
 @click.option("--pkg_path", default=None, help="Package root path for module naming")
 @click.option("--pending", is_flag=True)
-def timeline(root, pkg_path, pending):
+@click.option("--output", default="docs/timeline.md", help="If specified and not 'str', save markdown to this file. If it is 'str', print to console")
+def timeline(root, pkg_path, pending, output):
     """Visualize timeline"""
-    graph = build_graph_from_root(root, pkg_path=pkg_path)
-    visualize_timeline(graph, pending=pending)
-
+    return cmd_timeline(root, pkg_path, pending, output)
 
 # ------------------------------------------------------------
 # gantt
 # ------------------------------------------------------------
+
+def cmd_gantt(root, pkg_path, pending, output):
+    """Visualize Gantt chart"""
+    graph = build_graph_from_root(root, pkg_path=pkg_path)
+    if output:
+        content = graph.to_mermaid_gantt(pending=pending)
+        if output == "str":
+            click.echo(content)
+            return content
+        with open(output, "w", encoding="utf-8") as f:
+            f.write(content)
+        click.echo(f"✅ Gantt chart saved to {output}")
+    else:
+        visualize_gantt(graph, pending=pending)
+
 @cli.command()
 @click.option("--root", multiple=True, required=True)
 @click.option("--pkg_path", default=None, help="Package root path for module naming")
 @click.option("--pending", is_flag=True)
-def gantt(root, pkg_path, pending):
+@click.option("--output", default="docs/gantt.md", help="If specified and not 'str', save markdown to this file. If it is 'str', print to console")
+def gantt(root, pkg_path, pending, output):
     """Visualize Gantt chart"""
-    graph = build_graph_from_root(root, pkg_path=pkg_path)
-    visualize_gantt(graph, pending=pending)
-
+    return cmd_gantt(root, pkg_path, pending, output)
 
 # ------------------------------------------------------------
 # mainline
 # ------------------------------------------------------------
-@cli.command()
-@click.option("--root", multiple=True, required=True)
-@click.option("--pkg_path", default=None, help="Package root path for module naming")
-@click.option("--start", required=True, help="Kickoff node ID ending with this string")
-def mainline(root, pkg_path, start):
+def cmd_mainline(root, pkg_path, start, output):
     """Analyze mainline from a kickoff node"""
     graph = build_graph_from_root(root, pkg_path=pkg_path)
     # 找出真正的 kickoff node ID
-    matched_ids = [uid for uid in graph.units_by_id.keys() if uid.endswith(start)]
-    if not matched_ids:
-        raise ValueError(f"No kickoff node ID ends with '{start}'")
-    if len(matched_ids) > 1:
-        raise ValueError(f"Multiple kickoff node IDs end with '{start}': {matched_ids}")
-    kickoff_id = matched_ids[0]
+    try:
+        kickoff_id = find_kickoff_node_id(graph, start)
+    except ValueError as e:
+        click.echo(f"❌ mainline Error: {e}")
+        return
 
     directed = graph.directed_mainline(kickoff_id)
     weak = graph.weakly_connected_mainline(kickoff_id)
@@ -205,33 +179,92 @@ def mainline(root, pkg_path, start):
     critical = graph.directed_pending_critical_path(kickoff_id)
     external = graph.external_dependencies(kickoff_id)
 
-    click.echo(f"# Directed mainline (internal only) from {start}")
+    content: str = f"# Mainline Analysis from {start}\n\n"
+    def add_content_line(origin_line:str, line: str):
+        if output:
+            origin_line += line + "\n"
+        else:
+            click.echo(line)
+        return origin_line
+
+    content = add_content_line(content, f"# Directed mainline (internal only) from {start}")
     for u in directed:
-        click.echo(f"  - {u} [{graph.units_by_id[u].status}]")
+        content = add_content_line(content, f"  - {u} [{graph.units_by_id[u].status}]")
 
-    click.echo(f"\nCompletion (internal mainline): {completion*100:.1f}%")
+    content = add_content_line(content, f"\n# Completion (internal mainline): {completion*100:.1f}%")
 
-    click.echo(f"\nDirected pending critical path (internal):")
+    content = add_content_line(content, f"\n# Directed pending critical path (internal):")
     if critical:
         for u in critical:
-            click.echo(f"  -> {u} [{graph.units_by_id[u].status}]")
+            content = add_content_line(content, f"  -> {u} [{graph.units_by_id[u].status}]")
     else:
-        click.echo("  (no pending critical path)")
+        content = add_content_line(content, "  (no pending critical path)")
 
-    click.echo(f"\nWeakly connected mainline (internal + external) from {start}:")
+    content = add_content_line(content, f"\n# Weakly connected mainline (internal + external) from {start}:")
     for u in weak:
         tag = "internal" if graph.is_internal(u) else "external"
         status = graph.units_by_id[u].status if graph.is_internal(u) else "unknown"
-        click.echo(f"  - {u} [{tag}] [{status}]")
-
-    click.echo(f"\nExternal dependencies in this component:")
+        content = add_content_line(content, f"  - {u} [{tag}] [{status}]")
+    content = add_content_line(content, f"\n# External dependencies in this component:")
     if external:
         for u in external:
-            click.echo(f"  - {u}")
+            content = add_content_line(content, f"  - {u}")
     else:
-        click.echo("  (none)")
+        content = add_content_line(content, "  (none)")
+        
+    if output:
+        with open(output, "w", encoding="utf-8") as f:
+            f.write(content)
+        click.echo(f"✅ Mainline analysis saved to {output}")
 
 
+@cli.command()
+@click.option("--root", multiple=True, required=True)
+@click.option("--pkg_path", default=None, help="Package root path for module naming")
+@click.option("--start", required=True, help="Kickoff node ID ending with this string")
+@click.option("--output", default="docs/mainline.md", help="If specified, save visualization to this file")
+def mainline(root, pkg_path, start, output):
+    """Analyze mainline from a kickoff node"""
+    return cmd_mainline(root, pkg_path, start, output)
+
+
+@cli.command()
+@click.option("--root", multiple=True, required=True)
+@click.option("--pkg_path", default=None, help="Package root path for module naming")
+@click.option("--start", default="kickoff", help="Kickoff node ID ending with this string")
+def dump_all_dev_mds(root: List[str], pkg_path: Optional[str], start: Optional[str]):
+    """Dump all docs/dev_*.md files for the project"""
+    
+    # Build Roadmap
+    cmd_roadmap(root, pkg_path, output="docs/dev_roadmap.md", kickoff=start)
+    
+    # Build Dependency Graph
+    content = "# Dependency Graph\n\n"
+    content += cmd_dependency(root, pkg_path, pending=False, output="str") or ""
+    with open("docs/dev_dependency_graph.md", "w", encoding="utf-8") as f:
+        f.write(content)
+    
+    # Build Timeline
+    content = "# Timeline\n\n"
+    content += cmd_timeline(root, pkg_path, pending=False, output="str") or ""
+    content += "\n\n# Timeline (Pending Only)\n\n"
+    content += cmd_timeline(root, pkg_path, pending=True, output="str") or ""
+    with open("docs/dev_timeline.md", "w", encoding="utf-8") as f:
+        f.write(content)
+        
+    # Build Gantt Chart
+    content = "# Gantt Chart\n\n"
+    content += cmd_gantt(root, pkg_path, pending=False, output="str") or ""
+    content += "\n\n# Gantt Chart (Pending Only)\n\n"
+    content += cmd_gantt(root, pkg_path, pending=True, output="str") or ""
+    with open("docs/dev_gantt_chart.md", "w", encoding="utf-8") as f:
+        f.write(content)
+        
+    # Build Mainline Analysis
+    mainline_output = "docs/dev_mainline_analysis.md"
+    cmd_mainline(root, pkg_path, start=start, output=mainline_output)
+    
+    click.echo("✅ All dev_*.md files have been generated in the docs/ directory.")
 # ------------------------------------------------------------
 # Entry point
 # ------------------------------------------------------------

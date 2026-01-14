@@ -1,3 +1,12 @@
+# [2026-01-14] v0.1.1 準備上 Github
+1. [am_server](src\am_server\main.py) 由於接收的是 htmx 的 DataForm，所以，使用 
+  ``` py
+  Annotated[str, Form()]
+  ```
+  將想要的型別(如 `str`) 包在裏頭，這樣才能取得前端的API呼叫。
+
+1. [start_servers.bat](start_servers.bat) 呼叫此檔，可以同時開啟 Zensical 與 am_server(很陽春，還早)，方便開發。
+
 # [2026-01-11] 已經請Grok 簡單寫了，正要測
 
 # [2026-01-11] Gantt 圖需要的時間宣告法Copilot 提出，然後Grok幫忙完整
