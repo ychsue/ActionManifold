@@ -1,6 +1,6 @@
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
-from typing import Callable, List, Optional, Tuple, Dict
+from typing import Callable, List, Literal, Optional, Tuple, Dict
 import inspect
 import builtins
 
@@ -15,12 +15,14 @@ def get_fn_key(fn: Callable) -> Tuple[Optional[str], str]:
     qual = fn.__qualname__
     return (source, qual)
 
+STATUS_TYPE = Literal["pending", "done", "planned", "imagined"]
+
 @dataclass
 class FeatureUnit:
     fn: Callable
     id: str
     display_name: Optional[str] = None
-    status: str = "pending"
+    status: STATUS_TYPE = "pending"
     belongs_to: List[str] = field(default_factory=list)
     depends_on: List[Callable] = field(default_factory=list)  # symbol-based
     due: Optional[datetime|TimeExpr] = None
@@ -52,7 +54,7 @@ def feature_unit(
     *,
     id: Optional[str] = None,
     display_name: Optional[str] = None,
-    status: Optional[str] = None,
+    status: Optional[STATUS_TYPE] = None,
     belongs_to: Optional[List[str]] = None,
     depends: Optional[List[Callable]] = None,
     due: Optional[datetime|TimeExpr] = None,
@@ -61,6 +63,8 @@ def feature_unit(
     estimate: Optional[float] = None,
     priority: Optional[int] = None,
     notes: Optional[str] = None,
+    created_at: Optional[datetime] = None,
+    completed_at: Optional[datetime] = None,
     weight: float = 1.0,
 ):
     belongs_to = belongs_to or []
@@ -88,6 +92,8 @@ def feature_unit(
                 priority=priority,
                 notes=notes,
                 weight=weight,
+                created_at=created_at or datetime.now(),
+                completed_at=completed_at,
             )
             print(f"Created FeatureUnit: {unit_id}")  # Add this line
         else:

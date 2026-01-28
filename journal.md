@@ -1,3 +1,8 @@
+# [2026-01-28] 我得先回來 runtime 的設計
+
+1. 參考 [DISCUSSION_dev_run.md](discussions\DISCUSSION_dev_run.md) 的最後一個討論，先完成 runtime
+2. [DISCUSSION_BU.md](discussions/DISCUSSION_BU.md) line 10080 以後的部分得完成
+
 # [2026-01-14] v0.1.1 準備上 Github
 1. [am_server](src\am_server\main.py) 由於接收的是 htmx 的 DataForm，所以，使用 
   ``` py
