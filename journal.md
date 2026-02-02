@@ -1,3 +1,9 @@
+# [2026-02-02] runtime 設計中，以Test First 來設計，謝謝Copilot
+
+1. playbook 有一個物件來管理：  [test_playbook_wrapper.py](tests\runtime\test_playbook_wrapper.py) -> [playbook.py](src\am_core\playbook.py)
+2. run_watcher 來包裝run的結果，不過，他不包住 run [test_run_watcher.py](tests\runtime\test_run_watcher.py) -> [run_watcher](src\am_core\run_watcher.py)
+3. decision_block 用來切換 state [test_decision_block.py](tests\runtime\test_decision_block.py) -> [decision_block.py](src\am_core\decision_block.py)
+
 # [2026-01-28] 我得先回來 runtime 的設計
 
 1. 參考 [DISCUSSION_dev_run.md](discussions\DISCUSSION_dev_run.md) 的最後一個討論，先完成 runtime
