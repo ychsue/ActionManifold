@@ -15,6 +15,7 @@ def run_watcher(
     start_time: Optional[float] = None,
     end_time: Optional[float] = None,
     timeout_flag: Optional[bool] = None,
+    parent_state: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
     監控單一 state 的執行結果，決定語意上的 status，並產生 event。
@@ -28,7 +29,7 @@ def run_watcher(
         - 若 sm_output["status"] == "fail" 且 retry_count < retry_times → status="retry"
         - 若 retry_count >= retry_times → status="fail"
     - event：
-        - state, output, enriched, retry_count, timeout, metadata_delta, start_time, end_time
+        - state, output, enriched, retry_count, timeout, metadata_delta, start_time, end_time, parent_state
     """
 
     # --- 時間處理 ---
@@ -81,6 +82,7 @@ def run_watcher(
 
     event: Dict[str, Any] = {
         "state": state_name,
+        "parent_state": parent_state,
         "output": sm_output,
         "enriched_status": status,
         "retry_count": current_retry,

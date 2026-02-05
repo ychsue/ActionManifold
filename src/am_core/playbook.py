@@ -1,65 +1,153 @@
 # src/am_core/playbook.py
 
-from typing import Any, Dict, List
+from __future__ import annotations
+from typing import Any, Dict, Optional
+import importlib
+import json
+import os
 
-from sympy import false
+from .builtin_states import SuccessStateMachine, ErrorStateMachine, FailStateMachine
 
+INTERNAL_STATES = {
+    "Success": SuccessStateMachine,
+    "Error": ErrorStateMachine,
+    "Fail": FailStateMachine,
+}
 
 class Playbook:
-    def __init__(self, spec: Dict[str, Any]):
-        self._spec = spec
-        self._states_index = {s["name"]: s for s in spec.get("states", [])}
-        self._registry = spec.get("registry", {})
+    """
+    Playbook 是一個可序列化的 Flow Graph + Resolver。
+    不 import Orchestrator，不 instantiate Orchestrator。
+    只回傳 constructor info，由 runtime 決定如何 instantiate。
+    """
 
-    # --- 基本語意 ---
+    def __init__(self, data: Dict[str, Any], base_path: Optional[str] = None):
+        self.data = data
+        self.base_path = base_path
 
+        self.states = {s["name"]: s for s in data.get("states", [])}
+        self.initial = data.get("initial")
+        self.final = set(data.get("final", []))
+        self.registry = data.get("registry", {})
+
+    # -------------------------
+    # 基本查詢
+    # -------------------------
     def initial_state(self) -> str:
-        return self._spec["initial"]
-
+        if not self.initial:
+            raise ValueError("Playbook has no initial state defined.")
+        elif isinstance(self.initial, str):
+            return self.initial
+        else:
+            raise ValueError(f"Playbook initial state must be a string. Got: {type(self.initial)}")
+        
     def is_final(self, state: str) -> bool:
-        finals: List[str] = self._spec.get("final", [])
-        return state in finals
+        return state in self.final
 
     def get_state_def(self, state: str) -> Dict[str, Any]:
-        try:
-            return self._states_index[state]
-        except KeyError:
-            raise KeyError(f"State '{state}' not found in playbook.states")
+        return self.states.get(state, {})
 
-    def get_state_class(self, state: str):
-        try:
-            return self._registry[state]
-        except KeyError:
-            raise KeyError(f"State class for '{state}' not found in playbook.registry")
-
-    def instantiate_state(self, state: str, **kwargs):
-        cls = self.get_state_class(state)
-        return cls(**kwargs)
-
-    # --- 專門給 decision_block / orchestrator 用的語意 ---
-
-    def get_next_state_by_default_transition(self, stState: str, by_order = false) -> str | None:
+    # -------------------------
+    # 解析 state constructor info
+    # -------------------------
+    def get_state_constructor(self, state: str) -> Dict[str, Any]:
         """
-        對於只有 'to' 的簡單 state：
-        { "name": "StartState", "to": "NextState" }
-        若 沒有 'to'，且by_order is false則回傳 None
-        若 沒有 'to'，且by_order is true則回傳 下一個 state name
-        依照 playbook.states 的順序
+        回傳 constructor info：
+        {
+            "kind": "python" | "orchestrator" | "world",
+            "class": <python class> (optional),
+            "playbook": <Playbook> (optional),
+            "path": <file path> (optional)
+        }
         """
-        state_def = self.get_state_def(stState)
-        next_state = state_def.get("to")
-        if next_state is None and by_order:
-            states = self._spec.get("states", [])
-            for i, s in enumerate(states):
-                if s["name"] == stState and i + 1 < len(states):
-                    next_state = states[i + 1]["name"]
-                    break
-        return next_state
-
-    def get_switch_mapping(self, state: str) -> Dict[str, str] | None:
-        """
-        對於有 'switch' 的 state：
-        { "name": "NextState", "switch": { "ok == True": "Success", ... } }
-        """
+        # 0. internal builtin states
+        if state in INTERNAL_STATES:
+            return {
+                "kind": "python",
+                "class": INTERNAL_STATES[state],
+            }
+        
         state_def = self.get_state_def(state)
-        return state_def.get("switch")
+
+        # 1. inline class
+        if state in self.registry and isinstance(self.registry[state], type):
+            return {
+                "kind": "python",
+                "class": self.registry[state],
+            }
+
+        # 2. inline nested orchestrator
+        if state in self.registry and isinstance(self.registry[state], dict):
+            entry = self.registry[state]
+            playbook = entry.get("playbook")
+            playbook = Playbook(playbook, base_path=self.base_path) if isinstance(playbook, dict) else playbook
+            return {
+                "kind": "orchestrator",
+                "class": entry.get("cls", None),
+                "playbook": entry["playbook"],
+            }
+
+        # 3. type resolver
+        if "type" in state_def:
+            return self._resolve_type(state_def["type"])
+
+        raise ValueError(f"Cannot resolve constructor for state: {state}")
+
+    # -------------------------
+    # type resolver
+    # -------------------------
+    def _resolve_type(self, type_str: str) -> Dict[str, Any]:
+
+        if type_str.startswith("python:"):
+            cls = self._load_python_class(type_str[len("python:"):])
+            return {"kind": "python", "class": cls}
+
+        if type_str.startswith("playbook:"):
+            pb = self._load_sub_playbook(type_str[len("playbook:"):])
+            return {"kind": "orchestrator", "playbook": pb}
+
+        if type_str.startswith("world:"):
+            return self._load_world(type_str[len("world:"):])
+
+        raise ValueError(f"Unknown type: {type_str}")
+
+    # -------------------------
+    # python class loader
+    # -------------------------
+    def _load_python_class(self, path: str):
+        module_name, class_name = path.rsplit(".", 1)
+        module = importlib.import_module(module_name)
+        return getattr(module, class_name)
+
+    # -------------------------
+    # nested playbook loader
+    # -------------------------
+    def _load_sub_playbook(self, path: str):
+        full_path = self._resolve_path(path)
+        with open(full_path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        return Playbook(data, base_path=os.path.dirname(full_path))
+
+    # -------------------------
+    # world loader（未來可擴充）
+    # -------------------------
+    def _load_world(self, path: str):
+        full_path = self._resolve_path(path)
+        with open(full_path, "r", encoding="utf-8") as f:
+            world_cfg = json.load(f)
+
+        sub_pb = Playbook(world_cfg["playbook"], base_path=os.path.dirname(full_path))
+
+        return {
+            "kind": "world",
+            "playbook": sub_pb,
+            "workdir": world_cfg.get("workdir"),
+        }
+
+    # -------------------------
+    # path resolver
+    # -------------------------
+    def _resolve_path(self, path: str) -> str:
+        if self.base_path:
+            return os.path.join(self.base_path, path)
+        return path

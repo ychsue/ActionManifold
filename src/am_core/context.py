@@ -1,152 +1,73 @@
-from ast import Or
-import json
-from pathlib import Path
-from typing import Any, Optional
-import weakref
-import types
-import inspect
+# src/am_core/context.py
 
-from sympy import Function
+from __future__ import annotations
+from typing import Any, Dict, Optional
 
-from .leak_monitor import LeakMonitor
 
-class CtxBus:
+class Ctx:
     """
-    CtxBus 是一個簡單的事件總線，用於在不同的 StateMachine 之間傳遞事件。像是公佈欄一樣，任何訂閱了 CtxBus 的 StateMachine 都能接收到發佈的事件。
-    這樣的設計有助於解耦不同 StateMachine 之間的依賴關係，讓它們能夠更靈活地互動。
-    例如，一個 StateMachine 可以在完成某個任務後發佈一個事件，其他訂閱了該事件的 StateMachine 就能夠根據這個事件來決定自己的行為。
-    這種事件驅動的架構有助於提升系統的可擴展性和維護性。
+    Immutable lexical-scope context tree.
+
+    語意：
+    - ctx 是一棵不可變的語意樹（lexical scope）
+    - child_ctx = parent_ctx.child(...) 會產生新的 ctx，不會修改 parent
+    - child_ctx 只有單向指向 parent，不會形成 cycle
+    - lookup 是向上查找（shadowing）
+    - 適合 SM / ORCH / WORLD 的嵌套
+    - replay/resume 時可重建 ctx_tree
     """
-    def __init__(self):
-        self.channels = {}  # name -> list of subscribers
-        self.store = {}
 
-    def subscribe(self, fn: Function|types.MethodType, channel: str = "default"):
-        subs = self.channels.setdefault(channel, [])
+    __slots__ = ("_parent", "_values")
 
-        # bound method → WeakMethod
-        if inspect.ismethod(fn):
-            subs.append(weakref.WeakMethod(fn))
-            return
+    def __init__(self, parent: Optional["Ctx"] = None, **values: Any):
+        self._parent = parent
+        self._values = values
 
-        # function → weakref.ref
-        try:
-            subs.append(weakref.ref(fn))
-            return
-        except TypeError:
-            # lambda / builtins → cannot weakref
-            subs.append(fn)
-
-    def publish(self, event, channel: str = "default"):
-        subs = self.channels.get(channel, [])
-        alive = []
-
-        for sub in subs:
-            if isinstance(sub, weakref.ReferenceType):
-                fn = sub()
-                if fn:
-                    fn(event)
-                    alive.append(sub)
-            else:
-                sub(event)
-                alive.append(sub)
-
-        self.channels[channel] = alive
-
-    def set(self, key: str, value: Any):
-        self.store[key] = value
-
-    def get(self, key: str, default: Optional[Any]=None):
-        return self.store.get(key, default)
-        
-class WorldCtx:
-    """
-    World 主要是為了紀錄整個 workflow 的執行狀態，方便事後追蹤與除錯。
-    """
-    def __init__(self, workflow_id: str, run_id: str, run_dir: Path):
-        self.workflow_id = workflow_id
-        self.run_id = run_id
-        self.run_dir = run_dir
-        self.state = {}
-        self.event_log = []
-
-    def log_event(self, event):
-        self.event_log.append(event)
-
-    def dump(self):
-        path = self.run_dir / f"world_{self.run_id}.json"
-        data = {
-            "workflow_id": self.workflow_id,
-            "run_id": self.run_id,
-            "state": self.state,
-            "event_log": self.event_log,
-        }
-        stJson = json.dumps(data, indent=2, ensure_ascii=False)
-        
-        # write to file even if run_dir does not exist
-        self.run_dir.mkdir(parents=True, exist_ok=True)
-        path.write_text(stJson, encoding="utf-8" )
-
-    @staticmethod
-    def load(run_dir, run_id: str = "world"):
-        data = json.loads((run_dir / f"world_{run_id}.json").read_text())
-        wc = WorldCtx(data["workflow_id"], data["run_id"], run_dir)
-        wc.state.update(data["state"])
-        wc.event_log.extend(data["event_log"])
-        return wc
-    
-class BaseCtx:
-    """
-    BaseCtx 是 Orchestrator 和 StateMachine 的共同父類別，提供基本的上下文功能。
-    """
-    def __init__(self, name, parent_orchCtx: Optional["OrchCtx"]=None):
-        LeakMonitor.track_ctx(self)
-        self.name = name
-        self.parent = parent_orchCtx
-        self.exposure = {}
-        self.init = {}
-        self.scratch = {}
-        self.event = {}
-        self.ref = {}
-
-    def get(self, key, default: Optional[Any]=None):
-        if key in self.exposure:
-            return self.exposure[key]
-        if self.parent:
-            return self.parent.get(key, default)
+    # -------------------------
+    # 查找（向上 lexical lookup）
+    # -------------------------
+    def get(self, key: str, default: Any = None) -> Any:
+        if key in self._values:
+            return self._values[key]
+        if self._parent:
+            return self._parent.get(key, default)
         return default
 
-    def get_ref(self, key, default: Optional[Any]=None):
-        if key in self.ref:
-            return self.ref[key]
-        if self.parent:
-            return self.parent.get_ref(key, default)
-        return default
+    # -------------------------
+    # 是否存在（向上 lexical lookup）
+    # -------------------------
+    def has(self, key: str) -> bool:
+        if key in self._values:
+            return True
+        if self._parent:
+            return self._parent.has(key)
+        return False
 
-    def set(self, key, value:Any):
-        self.exposure[key] = value
-        
-    def set_ref(self, key, value:Any):
-        self.ref[key] = value
+    # -------------------------
+    # 建立子 ctx（shadow override）
+    # -------------------------
+    def child(self, **overrides: Any) -> "Ctx":
+        """
+        建立新的 child ctx，不會修改 parent。
+        """
+        return Ctx(parent=self, **overrides)
 
-    def print_ctx_tree(self, indent=0):
-        print("  " * indent + self.name)
-        for child in getattr(self, "children", []):
-            child.print_ctx_tree(indent + 1)
-class OrchCtx(BaseCtx):
-    """
-    Orchestrator 就像檔案系統中的目錄，所以，其parent是另一個OrchCtx(目錄)。
-    """
-    def __init__(self, name, parent_orchCtx: Optional["OrchCtx"]=None):
-        super().__init__(name, parent_orchCtx)
-        self.children: list[BaseCtx] = []
-        
-    def add_child(self, child_ctx: BaseCtx):
-        self.children.append(child_ctx)
-        
-class StateCtx(BaseCtx):
-    """
-    State 就像檔案系統中的檔案，所以，其parent是OrchCtx(目錄)。
-    """
-    def __init__(self, name, parent_orchCtx: Optional["OrchCtx"]=None):
-        super().__init__(name, parent_orchCtx)
+    # -------------------------
+    # 將 ctx 展開成 dict（用於 debug 或 replay）
+    # -------------------------
+    def flatten(self) -> Dict[str, Any]:
+        """
+        將整個 lexical scope 展開成一個 dict。
+        子層覆蓋父層。
+        """
+        result = {}
+        if self._parent:
+            result.update(self._parent.flatten())
+        result.update(self._values)
+        return result
+
+    # -------------------------
+    # 方便 debug
+    # -------------------------
+    def __repr__(self) -> str:
+        return f"Ctx(values={self._values}, parent={bool(self._parent)})"

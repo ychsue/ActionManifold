@@ -37,5 +37,13 @@ def decision_block(
     if "to" in state_def:
         return state_def["to"]
 
+    # 若沒有 switch / to → fallback 用 state 順序
+    if "to" not in state_def and "switch" not in state_def:
+        states = list(playbook.states.keys())
+        idx = states.index(current_state)
+        if idx + 1 < len(states):
+            return states[idx + 1]
+        return None
+
     # 無法決定下一步
     return None

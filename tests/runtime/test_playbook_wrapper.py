@@ -1,83 +1,122 @@
 # tests/runtime/test_playbook_wrapper.py
 
+import json
+import os
+import pytest
+
 from am_core.playbook import Playbook
 
 
-class DummyStartState:
-    def __init__(self, **kwargs):
-        self.kwargs = kwargs
-
-    def run(self, metadata):
-        return {"ok": True}
-
-
-class DummyNextState:
-    def __init__(self, **kwargs):
-        self.kwargs = kwargs
-
-    def run(self, metadata):
-        return {"ok": metadata.get("ok", False)}
+# ----------------------------------------
+# 測試用的 dummy class
+# ----------------------------------------
+class DummyState:
+    pass
 
 
-example_playbook = {
-    "initial": "StartState",
-    "final": ["Success", "Error"],
-    "states": [
-        {
-            "name": "StartState",
-            "to": "NextState",
-        },
-        {
-            "name": "NextState",
-            "switch": {
-                "ok == True": "Success",
-                "ok == False": "Error",
-            },
-        },
-    ],
-    "registry": {
-        "StartState": DummyStartState,
-        "NextState": DummyNextState,
-    },
-}
+# ----------------------------------------
+# 測試 inline registry
+# ----------------------------------------
+def test_inline_registry_class():
+    pb = Playbook({
+        "initial": "A",
+        "final": [],
+        "states": [
+            {"name": "A"}
+        ],
+        "registry": {
+            "A": DummyState
+        }
+    })
+
+    ctor = pb.get_state_constructor("A")
+    assert ctor["kind"] == "python"
+    assert ctor["class"] is DummyState
 
 
-def test_playbook_basic_semantics():
-    pb = Playbook(example_playbook)
+# ----------------------------------------
+# 測試 python:module.Class 動態載入
+# ----------------------------------------
+def test_python_type_loading(tmp_path):
+    # 建立一個臨時 python module
+    module_path = tmp_path / "mymod.py"
+    module_path.write_text("class X:\n    pass\n")
 
-    assert pb.initial_state() == "StartState"
-    assert pb.is_final("Success") is True
-    assert pb.is_final("Error") is True
-    assert pb.is_final("StartState") is False
+    # 加入 sys.path
+    import sys
+    sys.path.insert(0, str(tmp_path))
 
-    start_def = pb.get_state_def("StartState")
-    assert start_def["to"] == "NextState"
+    pb = Playbook({
+        "initial": "A",
+        "final": [],
+        "states": [
+            {"name": "A", "type": "python:mymod.X"}
+        ]
+    })
 
-    next_def = pb.get_state_def("NextState")
-    assert "switch" in next_def
-    assert next_def["switch"]["ok == True"] == "Success"
-
-
-def test_playbook_instantiates_state_classes():
-    pb = Playbook(example_playbook)
-
-    start = pb.instantiate_state("StartState", foo=1)
-    assert isinstance(start, DummyStartState)
-    assert start.kwargs["foo"] == 1
-
-    next_state = pb.instantiate_state("NextState", bar=2)
-    assert isinstance(next_state, DummyNextState)
-    assert next_state.kwargs["bar"] == 2
+    ctor = pb.get_state_constructor("A")
+    assert ctor["kind"] == "python"
+    assert ctor["class"].__name__ == "X"
 
 
-def test_playbook_transition_helpers():
-    pb = Playbook(example_playbook)
+# ----------------------------------------
+# 測試 nested playbook: playbook:sub.json
+# ----------------------------------------
+def test_nested_playbook_loading(tmp_path):
+    # 建立 subflow.json
+    subflow = {
+        "initial": "B",
+        "final": [],
+        "states": [
+            {"name": "B"}
+        ]
+    }
+    sub_path = tmp_path / "subflow.json"
+    sub_path.write_text(json.dumps(subflow))
 
-    assert pb.get_next_state_by_default_transition("StartState") == "NextState"
-    assert pb.get_next_state_by_default_transition("NextState") is None
+    # 建立 main playbook
+    main_pb = Playbook({
+        "initial": "A",
+        "final": [],
+        "states": [
+            {"name": "A", "type": "playbook:subflow.json"}
+        ]
+    }, base_path=str(tmp_path))
 
-    switch = pb.get_switch_mapping("NextState")
-    if switch is None:
-        raise AssertionError("Switch mapping should not be None")
-    assert switch["ok == True"] == "Success"
-    assert switch["ok == False"] == "Error"
+    ctor = main_pb.get_state_constructor("A")
+    assert ctor["kind"] == "orchestrator"
+    assert isinstance(ctor["playbook"], Playbook)
+    assert ctor["playbook"].initial_state() == "B"
+
+
+# ----------------------------------------
+# 測試 world:world.json
+# ----------------------------------------
+def test_world_loading(tmp_path):
+    # 建立 world.json
+    world_cfg = {
+        "workdir": "/tmp/world1",
+        "playbook": {
+            "initial": "C",
+            "final": [],
+            "states": [
+                {"name": "C"}
+            ]
+        }
+    }
+    world_path = tmp_path / "world.json"
+    world_path.write_text(json.dumps(world_cfg))
+
+    pb = Playbook({
+        "initial": "A",
+        "final": [],
+        "states": [
+            {"name": "A", "type": "world:world.json"}
+        ]
+    }, base_path=str(tmp_path))
+
+    ctor = pb.get_state_constructor("A")
+    assert ctor["kind"] == "world"
+    assert ctor["workdir"] == "/tmp/world1"
+    assert isinstance(ctor["playbook"], Playbook)
+    assert ctor["playbook"].initial_state() == "C"
