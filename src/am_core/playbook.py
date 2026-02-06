@@ -1,10 +1,14 @@
 # src/am_core/playbook.py
 
 from __future__ import annotations
+from inspect import isclass
 from typing import Any, Dict, Optional
+from pathlib import Path
 import importlib
 import json
 import os
+
+from am_core.state_machine import StateMachine
 
 from .builtin_states import SuccessStateMachine, ErrorStateMachine, FailStateMachine
 
@@ -13,6 +17,33 @@ INTERNAL_STATES = {
     "Error": ErrorStateMachine,
     "Fail": FailStateMachine,
 }
+
+# PlaybookDict {
+#     "initial": str,
+#     "final": [str],
+#     "states": [
+#         {
+#             "name": str,
+#             "to": Optional[str],
+#             "switch": Optional[dict[str,str]],
+#             "timeout": Optional[number],
+#             "retry_times": Optional[number],
+
+#             # constructor info
+#             "class": Optional[str],        # Python class path
+#             "subflow": Optional[str|dict], # nested Playbook
+#             "builtin": Optional[str],      # "Success", "Error", ...
+#             "workdir": Optional[str],      # reserved for WORLD
+#         }
+#     ],
+#     "registry": {
+#         stateName: {
+#             "class": Optional[type],       # Python class
+#             "subflow": Optional[Playbook], # nested Playbook
+#             "workdir": Optional[str],
+#         }
+#     }
+# }
 
 class Playbook:
     """
@@ -50,49 +81,97 @@ class Playbook:
     # -------------------------
     # 解析 state constructor info
     # -------------------------
-    def get_state_constructor(self, state: str) -> Dict[str, Any]:
+    def get_state_constructor(self, state: str) -> dict:
         """
-        回傳 constructor info：
+        根據 schema（states + registry）組出 ctor_info：
+
         {
-            "kind": "python" | "orchestrator" | "world",
-            "class": <python class> (optional),
-            "playbook": <Playbook> (optional),
-            "path": <file path> (optional)
+            "class": PythonClass,
+            "subflow": Optional[Playbook],
+            "workdir": Optional[str],
         }
+
+        優先順序：
+        1. states 裡的宣告（本地）
+        2. registry 裡的宣告（外部注入）
+        3. INTERNAL_STATES（內建 SM）
         """
-        # 0. internal builtin states
-        if state in INTERNAL_STATES:
-            return {
-                "kind": "python",
-                "class": INTERNAL_STATES[state],
-            }
-        
+
         state_def = self.get_state_def(state)
 
-        # 1. inline class
-        if state in self.registry and isinstance(self.registry[state], type):
-            return {
-                "kind": "python",
-                "class": self.registry[state],
-            }
+        ctor: dict = {
+            "class": None,
+            "subflow": None,
+            "workdir": None,
+        }
 
-        # 2. inline nested orchestrator
-        if state in self.registry and isinstance(self.registry[state], dict):
+        # -------------------------
+        # 1. 先吃 registry（外部注入）
+        # -------------------------
+        if state in self.registry:
             entry = self.registry[state]
-            playbook = entry.get("playbook")
-            playbook = Playbook(playbook, base_path=self.base_path) if isinstance(playbook, dict) else playbook
-            return {
-                "kind": "orchestrator",
-                "class": entry.get("cls", None),
-                "playbook": entry["playbook"],
-            }
+            if isclass(entry) and issubclass(entry, StateMachine):
+                ctor["class"] = entry
+            elif isinstance(entry, dict):
+                ctor["class"] = entry.get("class") or ctor["class"]
+                ctor["subflow"] = entry.get("subflow") or ctor["subflow"]
+                ctor["workdir"] = entry.get("workdir") or ctor["workdir"]
 
-        # 3. type resolver
-        if "type" in state_def:
-            return self._resolve_type(state_def["type"])
+        # -------------------------
+        # 2. 再吃 states（本地宣告，覆寫 registry）
+        # -------------------------
 
-        raise ValueError(f"Cannot resolve constructor for state: {state}")
+        # 2-1 builtin：內建 SM（Success / Error / Fail）
+        builtin_name = state_def.get("builtin")
+        if builtin_name:
+            if builtin_name not in INTERNAL_STATES:
+                raise ValueError(f"Unknown builtin state: {builtin_name}")
+            ctor["class"] = INTERNAL_STATES[builtin_name]
 
+        # 2-2 class：Python class path（"a.b.C"）
+        class_path = state_def.get("class")
+        if class_path:
+            module_name, _, cls_name = class_path.rpartition(".")
+            if not module_name or not cls_name:
+                raise ValueError(f"Invalid class path for state {state}: {class_path}")
+            module = importlib.import_module(module_name)
+            ctor["class"] = getattr(module, cls_name)
+
+        # 2-3 subflow：巢狀 Playbook（dict 或 "playbook:xxx.json"）
+        subflow = state_def.get("subflow")
+        if subflow is not None:
+            if isinstance(subflow, dict):
+                ctor["subflow"] = Playbook(subflow, base_path=self.base_path)
+            elif isinstance(subflow, str):
+                if subflow.startswith("playbook:"):
+                    rel_path = subflow.split(":", 1)[1]
+                    pb_path = Path(self.base_path or ".") / rel_path
+                    with pb_path.open("r", encoding="utf-8") as f:
+                        pb_data = json.load(f)
+                    ctor["subflow"] = Playbook(pb_data, base_path=str(pb_path.parent))
+                else:
+                    raise ValueError(f"Unsupported subflow string for state {state}: {subflow}")
+            else:
+                raise TypeError(f"Invalid subflow type for state {state}: {type(subflow)}")
+
+        # 2-4 workdir：目前先只是 pass-through，未來給 WORLD 用
+        if "workdir" in state_def:
+            ctor["workdir"] = state_def["workdir"]
+
+        # -------------------------
+        # 3. 若什麼都沒有，試試 INTERNAL_STATES（state 名稱本身）
+        # -------------------------
+        if ctor["class"] is None and state in INTERNAL_STATES:
+            ctor["class"] = INTERNAL_STATES[state]
+            
+        if ctor["class"] is None and ctor["subflow"] is not None:
+            from .orchestrator import Orchestrator  # 避免循環 import
+            ctor["class"] = Orchestrator  # 若有 subflow 卻沒指定 class，預設用 Orchestrator
+
+        if ctor["class"] is None:
+            raise ValueError(f"No constructor found for state {state}")
+
+        return ctor
     # -------------------------
     # type resolver
     # -------------------------

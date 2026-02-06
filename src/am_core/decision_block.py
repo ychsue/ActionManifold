@@ -1,49 +1,37 @@
 # src/am_core/decision_block.py
 
-from __future__ import annotations
 from typing import Any, Dict, Optional
 from .playbook import Playbook
 
 
-def decision_block(
-    *,
-    playbook: Playbook,
-    current_state: str,
-    enriched_output: Dict[str, Any],
-) -> Optional[str]:
+def decision_block(playbook: Playbook, current_state: str, enriched_output: Dict[str, Any]) -> Optional[str]:
     """
-    根據 enriched_output["status"] 決定下一個 state。
-
-    語意：
-    - 若 current_state 是 final → 回傳 None
-    - 若 state_def 有 switch → 用 status 做字典 lookup
+    根據 enriched_output 決定下一個 state。
+   - 若 state_def 有 switch → 用 status 做字典 lookup
     - 若 state_def 有 to → 回傳 to
     - 若都沒有 → 回傳 None
     """
+    state_def = playbook.get_state_def(current_state)
+    sm_status = enriched_output["status"]
 
-    # final state 不應該再 transition
-    if playbook.is_final(current_state):
+    # 1. switch 語意
+    if "switch" in state_def:
+        sw = state_def["switch"]
+        if sm_status in sw:
+            return sw[sm_status]
+        # 若沒有對應，視為結束
         return None
 
-    state_def = playbook.get_state_def(current_state)
-
-    # switch transition
-    switch = state_def.get("switch")
-    if switch:
-        status = enriched_output.get("status")
-        return switch.get(status)
-
-    # linear transition
+    # 2. to 語意
     if "to" in state_def:
         return state_def["to"]
 
-    # 若沒有 switch / to → fallback 用 state 順序
-    if "to" not in state_def and "switch" not in state_def:
-        states = list(playbook.states.keys())
+    # 3. fallback：依 states 順序
+    states = list(playbook.states.keys())
+    if current_state in states:
         idx = states.index(current_state)
         if idx + 1 < len(states):
             return states[idx + 1]
-        return None
 
-    # 無法決定下一步
+    # 4. 沒有下一步 → 結束
     return None

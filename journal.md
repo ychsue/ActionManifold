@@ -1,3 +1,36 @@
+# [2026-02-06] 整個 playbook 的 schema 修改
+1. 現在長
+``` py
+PlaybookDict {
+    "initial": str,
+    "final": [str],
+    "states": [
+        {
+            "name": str,
+            "to": Optional[str],
+            "switch": Optional[dict[str,str]],
+            "timeout": Optional[number],
+            "retry_times": Optional[number],
+
+            # constructor info
+            "class": Optional[str],        # Python class path
+            "subflow": Optional[str|dict], # nested Playbook
+            "builtin": Optional[str],      # "Success", "Error", ...
+            "workdir": Optional[str],      # reserved for WORLD
+        }
+    ],
+    "registry": {
+        stateName: {
+            "class": Optional[type],       # Python class
+            "subflow": Optional[Playbook], # nested Playbook
+            "workdir": Optional[str],
+        } | StateMachine
+    }
+}
+```
+2. 其他的就搭配他修改
+
+
 # [2026-02-04] 已經有新的 orch, SM 了
 不過，
 1. orchestrator 是使用各別的class 繼承 Orchestrator，若沒有提供，則是直接使用 Orchestrator

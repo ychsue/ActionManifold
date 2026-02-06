@@ -82,8 +82,8 @@ async def test_nested_orchestrator_execution(tmp_path):
             "MainEnd": MainEnd,
             # inline nested orchestrator
             "SubFlow": {
-                "cls": Orchestrator,
-                "playbook": sub_pb,
+                "class": Orchestrator,
+                "subflow": sub_pb,
             },
         },
     }

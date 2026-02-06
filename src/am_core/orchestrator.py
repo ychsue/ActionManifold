@@ -47,27 +47,48 @@ class Orchestrator:
     # -------------------------
     # child instantiate（依 ctor info）
     # -------------------------
-    def _instantiate_child(self, state_name: str, child_ctx: Ctx, ctor: Dict[str, Any]):
-        kind = ctor["kind"]
+    def _instantiate_child(self, state_name: str, child_ctx: Ctx, ctor: dict):
+        """
+        ctor = {
+            "class": PythonClass,
+            "subflow": Optional[Playbook],
+            "workdir": Optional[str],
+        }
 
-        if kind == "python":
-            cls = ctor["class"]
-            return cls(ctx=child_ctx, parent=self)
+        語意：
+        - 若 class 是 Orchestrator → 用 subflow 當 playbook 建立子 orchestrator
+        - 若 class 是 StateMachine → 直接建立 SM
+        - 若 class 是 WorldStateMachine（未來）→ 也能自然支援
+        """
 
-        if kind == "orchestrator":
-            cls = ctor["class"]
-            cls = Orchestrator if cls is None else cls
-            sub_pb = ctor["playbook"]
-            return cls(playbook=sub_pb, ctx=child_ctx, parent=self)
+        cls = ctor["class"]
+        subflow = ctor.get("subflow")
+        workdir = ctor.get("workdir")
 
-        if kind == "world":
-            sub_pb = ctor["playbook"]
-            workdir = ctor.get("workdir")
-            world_ctx = child_ctx.child(workdir=workdir)
-            return Orchestrator(playbook=sub_pb, ctx=world_ctx, parent=self)
+        # Orchestrator（含自訂 orchestrator class）
+        from .orchestrator import Orchestrator  # 避免循環 import
 
-        raise ValueError(f"Unknown constructor kind for state {state_name}: {kind}")
+        if issubclass(cls, Orchestrator):
+            if subflow is None:
+                raise ValueError(f"State {state_name} uses Orchestrator but no subflow provided")
+            return cls(
+                playbook=subflow,
+                ctx=child_ctx,
+                parent=self,
+            )
 
+        # StateMachine（一般 SM）
+        from .state_machine import StateMachine
+
+        if issubclass(cls, StateMachine):
+            # 若未來 WORLD 要用 workdir，可在這裡 child_ctx.child(workdir=...)
+            return cls(
+                ctx=child_ctx,
+                parent=self,
+            )
+
+        raise TypeError(f"Unsupported constructor class for state {state_name}: {cls}")
+    
     # -------------------------
     # 主 runtime loop
     # -------------------------
