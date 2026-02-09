@@ -67,6 +67,23 @@ class Ctx:
         return result
 
     # -------------------------
+    # 計算 ctx 差異（用於 replay/resume）
+    # -------------------------
+    def diff(self, from_ctx: Ctx) -> Dict[str, Any]:
+        """
+        計算 self 與 from 的差異。
+        只比較當前層的值，不比較 parent。
+        """
+        diff = {}
+        for key in set(self._values.keys()).union(from_ctx._values.keys()):
+            if self._values.get(key) != from_ctx._values.get(key):
+                diff[key] = {
+                    "from": from_ctx._values.get(key),
+                    "to": self._values.get(key),
+                }
+        return diff
+    
+    # -------------------------
     # 方便 debug
     # -------------------------
     def __repr__(self) -> str:

@@ -9,6 +9,8 @@ from .context import Ctx
 from .run_watcher import run_watcher
 from .decision_block import decision_block
 from .playbook import Playbook
+from .utils import generate_event_id
+import time
 
 
 class Orchestrator:
@@ -173,6 +175,20 @@ class Orchestrator:
                 current_state=current_state,
                 enriched_output=enriched,
             )
+            
+            # 為了replay/resume 所需要的 event log，必須記錄 decision_block 的輸出（即 next_state）
+            event = {
+                "id": generate_event_id(),
+                "timestamp": time.time(),
+                "state": current_state,
+                "parent_state": parent_state,
+                "status": sm_output.get("status"),
+                "sm_output": sm_output,
+                "metadata": metadata.copy() if metadata else None,
+                "ctx_delta": child_ctx.diff(self.ctx) if hasattr(child_ctx, "diff") else None,
+                "transition": next_state,
+            }
+            self.emit(event)
 
             if next_state is None:
                 final_state = current_state
@@ -189,3 +205,5 @@ class Orchestrator:
             "metadata": self.metadata,
             "events": self.events,
         }
+        
+    

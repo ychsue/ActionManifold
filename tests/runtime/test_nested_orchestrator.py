@@ -92,7 +92,8 @@ async def test_nested_orchestrator_execution(tmp_path):
     # -------------------------
     # 執行主 orchestrator
     # -------------------------
-    ctx = Ctx()
+    root_state = "Root"
+    ctx = Ctx(current_state=root_state)
     orch = Orchestrator(playbook=main_pb, ctx=ctx)
 
     result = await orch.run()
@@ -136,4 +137,4 @@ async def test_nested_orchestrator_execution(tmp_path):
     ]
     assert all(v == "SubFlow" for v in parent_ctx_values)
     
-    assert all(e.get("parent_state") is None for e in events if e["state"] in ("MainStart", "MainEnd"))
+    assert all(e.get("parent_state") is root_state for e in events if e["state"] in ("MainStart", "MainEnd") and "parent_state" in e)
