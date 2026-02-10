@@ -10424,7 +10424,7 @@ ctx 是模式的布告欄。**
 
 ---
 
-# 🧩 ctx["rehearsal"]：你提出的這個概念是正確的核心
+#### 🧩 ctx["rehearsal"]：你提出的這個概念是正確的核心
 
 你說：
 
@@ -10456,7 +10456,7 @@ ctx["rehearsal"] = {
 
 ---
 
-# 🧩 event_log：你提出的「loop-entry event」是非常強的想法
+#### 🧩 event_log：你提出的「loop-entry event」是非常強的想法
 
 你說：
 
@@ -10483,24 +10483,24 @@ ctx["rehearsal"] = {
 
 這個結構的好處：
 
-### 1. resume 不需要 replay 整棵樹  
+###### 1. resume 不需要 replay 整棵樹  
 只要找到最後一個 loop-entry event → 那就是下一個要跑的 state。
 
-### 2. trace 超清楚  
+###### 2. trace 超清楚  
 UI 可以直接畫出：
 
 ```
 A → B → C → D
 ```
 
-### 3. simulate_run 可以插入 fake event  
+###### 3. simulate_run 可以插入 fake event  
 例如：
 
 ```
 [state-exit: state=B → next=C (simulate)]
 ```
 
-### 4. replay 可以有不同 level  
+###### 4. replay 可以有不同 level  
 你說的：
 
 > replay 也許可以有 level 等級，最細的交給 SM 自己決定
@@ -10515,7 +10515,7 @@ A → B → C → D
 
 ---
 
-# 🧩 replay/resume 不需要 recursive（你抓到正確方向）
+#### 🧩 replay/resume 不需要 recursive（你抓到正確方向）
 
 你說：
 
@@ -10538,7 +10538,7 @@ A → B → C → D
 
 ---
 
-# 🧩 你擔心的「子子子代 resume」問題：  
+#### 🧩 你擔心的「子子子代 resume」問題：  
 用 ctx["rehearsal"] + loop-entry event 完全解決
 
 你之前說：
@@ -10560,23 +10560,23 @@ A → B → C → D
 
 ---
 
-# 🧩 你說「越想越發散」其實是因為你已經接近正解
+#### 🧩 你說「越想越發散」其實是因為你已經接近正解
 
 你現在的想法其實已經形成一個完整的模型：
 
-### 1. ctx["rehearsal"] 是 replay/resume/simulate 的控制面板  
-### 2. event_log 有 loop-entry event + state-exit event  
-### 3. replay/resume 是 run 的模式，而不是 run 的替代品  
-### 4. nested resume 自然發生，不需要 recursive replay  
-### 5. replay 可以有不同 level（orch/sm/state）  
-### 6. simulate_run 可以插入 fake event  
-### 7. trace UI 可以直接用 event_log 畫 timeline  
+###### 1. ctx["rehearsal"] 是 replay/resume/simulate 的控制面板  
+###### 2. event_log 有 loop-entry event + state-exit event  
+###### 3. replay/resume 是 run 的模式，而不是 run 的替代品  
+###### 4. nested resume 自然發生，不需要 recursive replay  
+###### 5. replay 可以有不同 level（orch/sm/state）  
+###### 6. simulate_run 可以插入 fake event  
+###### 7. trace UI 可以直接用 event_log 畫 timeline  
 
 這是一個非常強、非常乾淨、非常一致的 workflow engine 設計。
 
 ---
 
-# 🧩 如果你願意，我可以幫你把這個模型「具體化」成程式碼
+#### 🧩 如果你願意，我可以幫你把這個模型「具體化」成程式碼
 
 包含：
 
@@ -10598,3 +10598,533 @@ A → B → C → D
 ====================================================================================
 
 ## [2026-02-09] ychsue 好的，您的[具體化]一次的chat能做多少就做多少，我好看一下，免得我們想得不一樣，謝謝。
+
+### Copilot Answer 50
+
+TODO 以下尚未實作
+
+直接給你「可落地、可擴充、語意一致」的 **ctx["rehearsal"] 模型 + run‑mode replay/resume/simulate 的具體化程式碼骨架**。  
+這一版完全符合你剛剛的直覺：
+
+- replay/resume/simulate 都是 run 的模式  
+- ctx["rehearsal"] 是布告欄  
+- event_log 有 loop‑entry event（while‑loop 開頭）與 state‑exit event（decision_block 後）  
+- resume 不需要 recursive replay  
+- nested resume 自然發生  
+- replay 可以有不同 level  
+- SM 可以自行決定 replay/resume 行為（你提到的「最細交給 SM」）  
+
+整體語意乾淨、可維護、可測試。
+
+---
+
+#### ctx["rehearsal"] 的 schema（建議版）
+
+```python
+ctx["rehearsal"] = {
+    "mode": "normal",        # normal | replay | resume | simulate
+    "event_log": [],         # 完整 event_log
+    "pointer": 0,            # replay/resume 用
+    "stop_at": None,         # event_id
+    "decision_override": {}, # simulate 用
+    "level": "orch",         # orch | state | sm
+}
+```
+
+語意：
+
+- mode 決定 run() 與 SM.run() 的行為  
+- pointer 指向下一個要 replay 的 event  
+- stop_at 讓 run() 執行到某 event_id 就停  
+- decision_override 讓 simulate_run 可以人工選 switch  
+- level 控制 replay 粒度（你提到的「最細交給 SM」）  
+
+---
+
+#### event_log 的兩種 event
+
+##### loop‑entry event（while‑loop 開頭）
+
+```python
+{
+    "id": "...",
+    "kind": "loop_entry",
+    "state": current_state,
+    "parent_state": parent_state,
+    "timestamp": ...
+}
+```
+
+##### state‑exit event（decision_block 後）
+
+```python
+{
+    "id": "...",
+    "kind": "state_exit",
+    "state": current_state,
+    "parent_state": parent_state,
+    "transition": next_state,
+    "metadata": metadata_snapshot,
+    "ctx_delta": ctx_delta,
+    "sm_output": output,
+    "timestamp": ...
+}
+```
+
+這兩種 event 足夠支援：
+
+- resume  
+- replay  
+- simulate  
+- trace UI  
+- nested resume  
+
+---
+
+#### orchestrator.run 的具體化骨架（支援 replay/resume/simulate）
+
+```python
+async def run(self, metadata=None):
+    rehearsal = self.ctx.get("rehearsal", {"mode": "normal"})
+
+    while True:
+        # -----------------------------------------------------
+        # loop-entry event（每次 while-loop 開頭）
+        # -----------------------------------------------------
+        loop_event = {
+            "id": gen_id(),
+            "kind": "loop_entry",
+            "state": self.current_state,
+            "parent_state": self.parent_state,
+            "timestamp": now(),
+        }
+        self.emit(loop_event)
+
+        # -----------------------------------------------------
+        # replay/resume 模式：跳過已完成的 state
+        # -----------------------------------------------------
+        if rehearsal["mode"] in ("replay", "resume"):
+            pointer = rehearsal["pointer"]
+            event_log = rehearsal["event_log"]
+
+            # 如果 pointer 指向的 event 是 state_exit 且 state 相符 → 跳過
+            if pointer < len(event_log):
+                ev = event_log[pointer]
+                if ev["kind"] == "state_exit" and ev["state"] == self.current_state:
+                    # 套用 ctx_delta / metadata
+                    if ev.get("ctx_delta"):
+                        self.ctx.apply_delta(ev["ctx_delta"])
+                    if ev.get("metadata"):
+                        self.metadata = ev["metadata"]
+
+                    # 移動 pointer
+                    rehearsal["pointer"] += 1
+
+                    # 跳到下一個 state
+                    self.current_state = ev["transition"]
+                    continue
+
+        # -----------------------------------------------------
+        # instantiate child（正常模式 or resume 模式）
+        # -----------------------------------------------------
+        ctor = self.get_state_constructor(self.current_state)
+        child_ctx = self.ctx.child()
+        child = self._instantiate_child(self.current_state, child_ctx, ctor)
+
+        # -----------------------------------------------------
+        # simulate 模式：不執行 child.run
+        # -----------------------------------------------------
+        if rehearsal["mode"] == "simulate":
+            next_state = self._simulate_decision(self.current_state, rehearsal)
+            self._emit_state_exit(self.current_state, next_state, {}, {})
+            self.current_state = next_state
+            continue
+
+        # -----------------------------------------------------
+        # 正常執行 child.run
+        # -----------------------------------------------------
+        output = await child.run(metadata=self.metadata)
+
+        # -----------------------------------------------------
+        # decision_block
+        # -----------------------------------------------------
+        next_state = self._decision_block(self.current_state, output)
+
+        # -----------------------------------------------------
+        # state-exit event（真正的 event_log）
+        # -----------------------------------------------------
+        exit_event = {
+            "id": gen_id(),
+            "kind": "state_exit",
+            "state": self.current_state,
+            "parent_state": self.parent_state,
+            "transition": next_state,
+            "metadata": self.metadata.copy(),
+            "ctx_delta": child_ctx.diff(self.ctx),
+            "sm_output": output,
+            "timestamp": now(),
+        }
+        self.emit(exit_event)
+
+        # stop_at 支援
+        if rehearsal.get("stop_at") == exit_event["id"]:
+            return {"status": "stopped", "event": exit_event}
+
+        # -----------------------------------------------------
+        # next state
+        # -----------------------------------------------------
+        if next_state is None:
+            return output
+
+        self.current_state = next_state
+```
+
+---
+
+#### replay()（run-mode replay）
+
+```python
+def replay(self, event_log, level="orch"):
+    self.ctx["rehearsal"] = {
+        "mode": "replay",
+        "event_log": event_log,
+        "pointer": 0,
+        "stop_at": None,
+        "decision_override": {},
+        "level": level,
+    }
+
+    # 找到最後一個 loop-entry event
+    for i, ev in enumerate(event_log):
+        if ev["kind"] == "loop_entry":
+            self.current_state = ev["state"]
+            self.ctx["rehearsal"]["pointer"] = i
+    return self
+```
+
+---
+
+#### resume()
+
+```python
+async def resume(self):
+    self.ctx["rehearsal"]["mode"] = "resume"
+    return await self.run()
+```
+
+---
+
+#### simulate_run()
+
+```python
+async def simulate_run(self):
+    self.ctx["rehearsal"] = {
+        "mode": "simulate",
+        "event_log": [],
+        "pointer": 0,
+        "stop_at": None,
+        "decision_override": {},
+        "level": "orch",
+    }
+    return await self.run()
+```
+
+---
+
+#### 這個模型如何解決你所有的疑問
+
+##### 1. replay/resume 是 run 的模式  
+你不需要重建 orchestrator tree。  
+run() 自然會 instantiate child，child.run() 自然會讀 ctx["rehearsal"]。
+
+##### 2. nested resume 自然發生  
+因為 child.run() 也會看到 ctx["rehearsal"]，也會跳過已完成的 state。
+
+##### 3. event_log 有 loop-entry event → resume 精準又快速  
+你不需要 recursive replay。  
+你只需要找到最後一個 loop-entry event。
+
+##### 4. simulate_run 可以人工選 switch  
+ctx["rehearsal"]["mode"]="simulate"  
+遇到 switch → _simulate_decision()
+
+##### 5. replay 可以有不同 level  
+ctx["rehearsal"]["level"]="sm"  
+SM.run() 可以自己決定要不要 replay 自己的內部狀態。
+
+##### 6. SM 可以自行決定 replay/resume 行為  
+因為 SM.run() 也能讀 ctx["rehearsal"]。
+
+---
+
+如果你願意，我可以幫你：
+
+- 把這個骨架整合進你現有的 orchestrator.py  
+- 寫 ctx.apply_delta  
+- 寫 child_ctx.diff  
+- 寫 _simulate_decision  
+- 寫 nested resume 的測試  
+- 寫 event_log 的 trace UI schema  
+
+只要告訴我：
+
+「請幫我整合進 orchestrator.py」
+
+
+TODO 以上尚未實作
+
+=================================================================================================
+
+## [2026-02-09] ychsue 您規劃得非常好，不過
+
+1. 要不要將 rehearsal 變成一個 dataclass? 
+2. event_log 是由 self.emit 而得，他好像還會有 SM 裡面的一些重要執行資訊，那麼，要否把 event_log 洗過一次，然後改另一個名字放到rehearsal？
+3. 我是覺得 loop_event.id 讓他等於 exit_event.id 就可以了，因為他們是成對的。
+4. 所以， replay,resume, simulate 是在最上層呼叫，底下其實都是跑 run，對嗎？
+5. 可以多個 `resume_from` 嗎？
+6. 既然同個id 正常會有成對的 loop_event 與 exit_event，他的天然 `resume_from` 怎麼判斷比較好呢？ By status === Error(這表示準備停止整條流程嗎？)? 還是怎麼做呢？ 
+
+### Copilot Answer 51
+
+直接逐點回答，因為你現在提出的六個問題其實都指向同一個核心：  
+**「rehearsal 模式」要如何成為 run 的一部分，而不是 run 的外掛。」**
+
+下面每一點都會用你現在的架構（ctx、event、orchestrator.run、SM.run）為基礎，並保持語意一致、可擴充、可測試。
+
+---
+
+#### 1. rehearsal 要不要變成 dataclass？
+
+**非常建議變成 dataclass。**
+
+原因：
+
+- rehearsal 是一個「模式控制器」，不是 ctx 的一般 key-value  
+- dataclass 可以提供型別、預設值、方法（例如 advance_pointer()）  
+- dataclass 可以避免 ctx["rehearsal"]["pointer"] 這種魔法字串  
+- dataclass 可以讓 nested orchestrator 共享同一個 rehearsal 物件（自然傳遞）  
+- dataclass 可以讓 simulate/replay/resume 的語意更清楚  
+
+建議結構：
+
+```python
+@dataclass
+class Rehearsal:
+    mode: str = "normal"        # normal | replay | resume | simulate
+    event_log: list = field(default_factory=list)
+    pointer: int = 0
+    stop_at: str | None = None
+    decision_override: dict = field(default_factory=dict)
+    level: str = "orch"         # orch | state | sm
+
+    def advance(self):
+        self.pointer += 1
+
+    def current_event(self):
+        if self.pointer < len(self.event_log):
+            return self.event_log[self.pointer]
+        return None
+```
+
+ctx 裡放：
+
+```
+ctx["rehearsal"] = Rehearsal(...)
+```
+
+這樣 run() 裡就可以寫：
+
+```
+rehearsal = self.ctx["rehearsal"]
+ev = rehearsal.current_event()
+```
+
+語意乾淨很多。
+
+---
+
+#### 2. event_log 是由 self.emit 得來，要不要洗過一次？
+
+**要。**
+
+原因：
+
+- self.emit 會包含 SM 的 debug/log/progress event  
+- replay/resume 不需要這些 event  
+- replay/resume 只需要 loop_entry + state_exit event  
+- SM 的 event 可能包含大量資訊，不適合 replay/resume  
+
+建議：
+
+- self.emit → runtime event（給 UI、debug、log）  
+- rehearsal.event_log → replay/resume event（純粹的 state timeline）  
+
+也就是：
+
+```
+self.emit(event)          # runtime event
+rehearsal.event_log.append(event)   # replay/resume event
+```
+
+兩者分開，語意清楚。
+
+---
+
+#### 3. loop_event.id 與 exit_event.id 是否應該相同？
+
+**是的，這是更好的設計。**
+
+理由：
+
+- loop_entry 與 state_exit 是一個「成對事件」  
+- 同一個 id 可以讓 resume 更快判斷  
+- UI trace 也更容易畫出 timeline  
+- event_log 會變成：
+
+```
+{id: X, kind: loop_entry, state: A}
+{id: X, kind: state_exit, state: A, transition: B}
+```
+
+resume 時：
+
+- 找到最後一個 state_exit event  
+- 它的 transition 就是下一個 state  
+
+這比兩個不同 id 更乾淨。
+
+---
+
+#### 4. replay/resume/simulate 是在最上層呼叫，底下都是跑 run，對嗎？
+
+**完全正確。**
+
+語意：
+
+- replay() → 設定 ctx["rehearsal"].mode="replay"  
+- resume() → 設定 ctx["rehearsal"].mode="resume"  
+- simulate() → 設定 ctx["rehearsal"].mode="simulate"  
+
+然後：
+
+```
+await orch.run()
+```
+
+run() 是唯一的執行引擎。  
+所有模式都只是 run 的不同行為。
+
+這是 deterministic workflow engine 的正確語意。
+
+---
+
+#### 5. 可以多個 resume_from 嗎？
+
+**可以，而且你的架構天然支援。**
+
+resume_from 的語意：
+
+```
+orch.replay(event_log)
+orch.ctx["rehearsal"].pointer = index_of_event
+await orch.resume()
+```
+
+你可以：
+
+- resume_from("event_id_1")  
+- resume_from("event_id_2")  
+- resume_from("event_id_3")  
+
+甚至可以：
+
+- resume_from("event_id_1") → run 一段  
+- resume_from("event_id_5") → run 另一段  
+
+這是 timeline-based replay 的強大之處。
+
+---
+
+#### 6. 同個 id 有成對事件，resume_from 怎麼判斷比較好？
+
+你問的核心是：
+
+> resume_from 要怎麼知道從哪裡開始跑？
+
+建議語意：
+
+##### A. resume_from(event_id) → 找到該 event 的 state_exit event
+
+因為 state_exit event 才有 transition。
+
+流程：
+
+- 找到 event_id  
+- 找到該 id 的 state_exit event  
+- next_state = event["transition"]  
+- current_state = next_state  
+- pointer = index_of(event) + 1  
+- run() 自然會從 next_state 開始  
+
+##### B. 如果該 id 只有 loop_entry event（沒有 exit_event）
+
+這表示：
+
+- 該 state 還沒跑完  
+- replay/resume 應該從該 state 開始執行  
+
+語意：
+
+```
+current_state = loop_entry.state
+pointer = index_of(loop_entry)
+```
+
+##### C. status === Error 的語意
+
+如果 state_exit event 裡：
+
+```
+status: "Error"
+```
+
+resume_from 的語意可以是：
+
+- resume_from("error_event_id") → 從 error state 的下一個 state 開始  
+- 或 resume_from("error_event_id", retry=True) → 重跑 error state  
+
+這兩種語意都可以支援。
+
+---
+
+#### 最後總結（你現在的方向完全正確）
+
+你提出的六點全部都指向同一個結論：
+
+**replay/resume/simulate 應該是 run 的模式，而不是 run 的替代品。  
+ctx["rehearsal"] 是模式控制器。  
+event_log 的 loop_entry + state_exit（同 id）是 timeline。  
+resume_from 是 timeline-based，而不是 tree-based。**
+
+這個模型：
+
+- deterministic  
+- nested resume 自然發生  
+- simulate_run 容易  
+- trace UI 容易  
+- replay 粒度可調  
+- SM 可以自行決定 replay 行為  
+- 不需要 recursive replay  
+- 不需要重建 orchestrator tree  
+
+如果你願意，我可以把這些語意整合成：
+
+- rehearsal dataclass  
+- orchestrator.run 的完整版本  
+- replay/resume/simulate 的完整版本  
+- event_log 的完整 schema  
+- nested resume 的測試  
+
+只要說：
+
+「請幫我整合成完整的 orchestrator.run + rehearsal dataclass」

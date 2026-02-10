@@ -34,6 +34,12 @@ class Ctx:
         return default
 
     # -------------------------
+    # 設定（只設定當前層，不修改 parent）
+    # -------------------------
+    def set(self, key: str, value: Any) -> None:
+        self._values[key] = value
+
+    # -------------------------
     # 是否存在（向上 lexical lookup）
     # -------------------------
     def has(self, key: str) -> bool:

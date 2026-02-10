@@ -1,3 +1,6 @@
+# [2026-02-10] 繼續準備，多了一個 ctx["rehearsal"] 的 class
+1. [orchestrator.py](src\am_core\orchestrator.py) 將 event_log 與 emit 分開來存。
+
 # [2026-02-09] 做了點小修改，預備開始實作 resume
 
 # [2026-02-06] 整個 playbook 的 schema 修改

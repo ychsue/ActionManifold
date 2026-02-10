@@ -1,7 +1,8 @@
 # src/am_core/orchestrator.py
 
 from __future__ import annotations
-from typing import Any, Dict, List, Optional
+from dataclasses import dataclass, field
+from typing import Any, Dict, List, Literal, Optional
 
 import asyncio
 
@@ -12,6 +13,22 @@ from .playbook import Playbook
 from .utils import generate_event_id
 import time
 
+@dataclass
+class Rehearsal:
+    mode: Literal["normal", "replay", "resume", "simulate"] = "normal"
+    event_log: List[Dict[str, Any]] = field(default_factory=list)
+    pointer: int = 0
+    stop_at: Optional[str] = None
+    decision_override: Dict[str, Any] = field(default_factory=dict)
+    level: Literal["orch", "state", "sm"] = "orch"
+
+    def advance(self):
+        self.pointer += 1
+
+    def current_event(self):
+        if self.pointer < len(self.event_log):
+            return self.event_log[self.pointer]
+        return None
 
 class Orchestrator:
     """
@@ -37,6 +54,8 @@ class Orchestrator:
 
         self.metadata: Dict[str, Any] = metadata or {}
         self.events: List[Dict[str, Any]] = []
+        if self.ctx.get("rehearsal") is None:
+            self.ctx.set("rehearsal", Rehearsal())
 
     # -------------------------
     # 事件冒泡
@@ -109,6 +128,7 @@ class Orchestrator:
             - decision_block(...) → next_state
         - 若 next_state 是 final 或 None → 結束
         """
+        rehearsal: Rehearsal = self.ctx.get("rehearsal")
         if metadata is None:
             metadata = self.metadata
         else:
@@ -126,6 +146,17 @@ class Orchestrator:
             # if self.playbook.is_final(current_state):
             #     final_state = current_state
                 # break
+            event_id = generate_event_id()
+
+            loop_event = {
+                    "id": event_id,
+                    "kind": "loop_entry",
+                    "state": current_state,
+                    "parent_state": parent_state,
+                    "timestamp": time.time(),
+                }
+            self.emit(loop_event)
+            rehearsal.event_log.append(loop_event)
 
             state_def = self.playbook.get_state_def(current_state)
             ctor = self.playbook.get_state_constructor(current_state)
@@ -175,10 +206,11 @@ class Orchestrator:
                 current_state=current_state,
                 enriched_output=enriched,
             )
-            
+                                
             # 為了replay/resume 所需要的 event log，必須記錄 decision_block 的輸出（即 next_state）
             event = {
-                "id": generate_event_id(),
+                "id": event_id,
+                "kind": "state_exit",
                 "timestamp": time.time(),
                 "state": current_state,
                 "parent_state": parent_state,
@@ -189,6 +221,7 @@ class Orchestrator:
                 "transition": next_state,
             }
             self.emit(event)
+            rehearsal.event_log.append(event)
 
             if next_state is None:
                 final_state = current_state
