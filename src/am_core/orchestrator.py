@@ -56,7 +56,15 @@ class Orchestrator:
         self.events: List[Dict[str, Any]] = []
         if self.ctx.get("rehearsal") is None:
             self.ctx.set("rehearsal", Rehearsal())
-
+        if self.ctx.get("i_th") is None:
+            self.ctx.set("i_th", 0)
+        rehearsal: Rehearsal = self.ctx.get("rehearsal")
+        
+        self.replay_events = [
+            ev for ev in rehearsal.event_log
+            if ev.get("parent_state") == self.ctx.get("parent_state")
+        ]
+        self.replay_pointer = 0
     # -------------------------
     # 事件冒泡
     # -------------------------
@@ -146,7 +154,9 @@ class Orchestrator:
             # if self.playbook.is_final(current_state):
             #     final_state = current_state
                 # break
-            event_id = generate_event_id()
+            # TODO replay/resume/simulate 考慮尚未周全
+            event_id = generate_event_id()+f"-{self.ctx.get('i_th')}"
+            self.ctx.set("i_th", self.ctx.get("i_th")+1)
 
             loop_event = {
                     "id": event_id,
@@ -193,7 +203,7 @@ class Orchestrator:
                 metadata=self.metadata,
                 start_time=start_time,
                 end_time=end_time,
-                timeout_flag=timeout_flag,
+                timeout_flag=sm_output.get("status") == "timeout",
                 parent_state=parent_state,
             )
 
@@ -208,7 +218,7 @@ class Orchestrator:
             )
                                 
             # 為了replay/resume 所需要的 event log，必須記錄 decision_block 的輸出（即 next_state）
-            event = {
+            exit_event = {
                 "id": event_id,
                 "kind": "state_exit",
                 "timestamp": time.time(),
@@ -220,8 +230,8 @@ class Orchestrator:
                 "ctx_delta": child_ctx.diff(self.ctx) if hasattr(child_ctx, "diff") else None,
                 "transition": next_state,
             }
-            self.emit(event)
-            rehearsal.event_log.append(event)
+            self.emit(exit_event)
+            rehearsal.event_log.append(exit_event)
 
             if next_state is None:
                 final_state = current_state

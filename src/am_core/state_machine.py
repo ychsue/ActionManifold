@@ -21,13 +21,16 @@ class StateMachine:
         self.ctx = ctx
         self.parent = parent
 
-    async def run(self, metadata: Dict[str, Any]) -> Dict[str, Any]:
+    async def run(self, metadata: Dict[str, Any], mode: str = "normal") -> Dict[str, Any]:
         """
         對外統一協定：
         - 接受 metadata
         - 回傳 dict（至少應該有 status）
         - 可在過程中呼叫 self.emit(event)
         """
+        if mode == "simulate":
+            return await self._simulate(metadata)
+
         output = await self._run(metadata)
         return output
 
@@ -45,3 +48,20 @@ class StateMachine:
         """
         if self.parent and hasattr(self.parent, "emit"):
             self.parent.emit(event)
+            
+    async def _simulate(self, metadata: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        simulate 模式：不執行 _run()
+        回傳預設或使用者提供的 output
+        """
+        rehearsal = self.ctx.get("rehearsal")
+        state_name = self.ctx.get("current_state")
+
+        override = rehearsal.decision_override.get(state_name, {})
+
+        # 預設 output
+        output = override.get("output", {"status": "ok"})
+
+        return output
+    
+    

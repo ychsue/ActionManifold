@@ -1,3 +1,5 @@
+# [2026-02-15] 準備自己寫一下想像中的 Orchestrator
+
 # [2026-02-10] 繼續準備，多了一個 ctx["rehearsal"] 的 class
 1. [orchestrator.py](src\am_core\orchestrator.py) 將 event_log 與 emit 分開來存。
 

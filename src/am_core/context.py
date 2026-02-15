@@ -89,6 +89,21 @@ class Ctx:
                 }
         return diff
     
+    #-------------------------
+    # Apply Delta（用於 replay/resume)
+    # 輸入來源為 child_ctx.diff(parent_ctx)
+    #-------------------------
+    def apply_delta(self, delta: Dict[str, Any]) -> Ctx:
+        """
+        根據 delta 建立新的 ctx。
+        delta 格式：{key: {"from": old_value, "to": new_value}}
+        """
+        new_values = self._values.copy()
+        for key, change in delta.items():
+            new_values[key] = change["to"]
+        return Ctx(parent=self._parent, **new_values)
+    
+    
     # -------------------------
     # 方便 debug
     # -------------------------
