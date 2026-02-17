@@ -230,3 +230,10 @@ class Playbook:
         if self.base_path:
             return os.path.join(self.base_path, path)
         return path
+    
+    def is_state_machine(self, state: str) -> bool:
+        try:
+            ctor_info = self.get_state_constructor(state)
+            return issubclass(ctor_info["class"], StateMachine)
+        except Exception:
+            return False

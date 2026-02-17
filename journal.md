@@ -1,3 +1,5 @@
+# [2026-02-17] 準備一步一步完成 replay/resume/simulate
+
 # [2026-02-15] 準備自己寫一下想像中的 Orchestrator
 
 # [2026-02-10] 繼續準備，多了一個 ctx["rehearsal"] 的 class
