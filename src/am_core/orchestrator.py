@@ -71,7 +71,7 @@ class Orchestrator:
         
         self.replay_events = [
             ev for ev in rehearsal.event_log
-            if ev.get("parent_state") == self.ctx.get("parent_state")
+            if ev.get("parent_state") == self.ctx.get("current_state")
         ]
         self.replay_pointer = 0
     # -------------------------
@@ -128,6 +128,14 @@ class Orchestrator:
         raise TypeError(f"Unsupported constructor class for state {state_name}: {cls}")
     
     # -------------------------
+    # replay helper
+    # -------------------------
+    def _replay_current_event(self):
+        if self.replay_pointer < len(self.replay_events):
+            return self.replay_events[self.replay_pointer]
+        return None
+    
+    # -------------------------
     # 主 runtime loop
     # -------------------------
     async def run(self, metadata: Optional[Dict[str, Any]] = None, mode: str = "normal") -> Dict[str, Any]:
@@ -161,8 +169,16 @@ class Orchestrator:
         while True:
             # 1. 根據 rehearsal 決定是要記錄還是取回 event，以及是否要真正執行 child
             ## 1.1 先初始化
-            restore_event = True if rehearsal.mode in ["replay", "resume"] else False
+            restore_event = False
             pass_execution = False
+            # --- 最小可用 replay：只處理 replay 模式 ---
+            if rehearsal.mode == "replay":
+                restore_event = True
+                pass_execution = True
+            else:
+                restore_event = False
+                pass_execution = False
+            # vvvvv 以下1.2先忽略，先調好 replay vvvvvv
             ## 1.2 再細調
             if rehearsal.mode == "replay":
                 if rehearsal.level in ["orch"] or (rehearsal.level == "state" and self.playbook.is_state_machine(current_state)):
@@ -218,7 +234,7 @@ class Orchestrator:
                     enriched_output=enriched,
                 )
                                 
-            self.after_decision(event_id, metadata, current_state, parent_state, enriched, child_ctx, next_state, rehearsal, restore_event=restore_event)
+            next_state = self.after_decision(event_id, metadata, current_state, parent_state, enriched, child_ctx, next_state, rehearsal, restore_event=restore_event)
 
             if next_state is None:
                 final_state = current_state
@@ -233,7 +249,7 @@ class Orchestrator:
         return {
             "final_state": final_state,
             "metadata": self.metadata,
-            "events": self.events,
+            "events": self.events, # 目前只有 run 會輸出
         }
         
     def before_ini_child(self, current_state: str, parent_state:str, rehearsal: Rehearsal, restore_event: bool) -> str:
@@ -241,10 +257,17 @@ class Orchestrator:
         root_ctx["i_th"] += 1
         
         if restore_event:
-            rehearsal.pointer += 1
-            event = rehearsal.event_log_resume[rehearsal.pointer]
-            event_id = event.get("id", f"{rehearsal.pointer} event does not have id")
-            # TODO 感覺應該更新metadata & child_ctx，因為他們要被 bypass 掉
+            ev = self._replay_current_event()
+            if ev is None:
+                raise RuntimeError("Replay pointer out of range")
+
+            if ev["kind"] != "before_ini_child":
+                raise RuntimeError("Replay mismatch: expected before_ini_child")
+
+            event_id = ev["id"]
+
+            # mimic: 不 emit、不 append
+            self.replay_pointer += 1
         else:
             event_id = generate_event_id()+f"-{root_ctx.get('i_th')-1}"
             loop_event = {
@@ -287,11 +310,29 @@ class Orchestrator:
         
         return sm_output, timeout_flag, start_time, end_time
     
-    def after_decision(self, event_id: str, metadata: Dict[str, Any], current_state: str, parent_state: str, enriched: Dict[str, Any], child_ctx: Ctx, next_state: str|None, rehearsal: Rehearsal, restore_event: bool):
+    def after_decision(self, event_id: str, metadata: Dict[str, Any], current_state: str, parent_state: str, enriched: Dict[str, Any], child_ctx: Ctx, next_state: str|None, rehearsal: Rehearsal, restore_event: bool) -> str|None:
         if restore_event:
-            rehearsal.pointer += 1 # TODO 不確定這樣是否正確，要思考一下
-            event = rehearsal.event_log_resume[rehearsal.pointer]
-            # TODO 感覺應該更新metadata & child_ctx，因為他們要被 bypass 掉
+            ev = self._replay_current_event()
+            if ev is None:
+                raise RuntimeError("Replay pointer out of range")
+
+            if ev["kind"] != "after_decision":
+                raise RuntimeError("Replay mismatch: expected after_decision")
+
+            # --- mimic ctx_delta ---
+            if ev.get("ctx_delta"):
+                child_ctx.apply_writes(ev["ctx_delta"])
+
+            # --- mimic metadata ---
+            if ev.get("metadata"):
+                self.metadata = ev["metadata"]
+
+            # --- mimic next_state ---
+            next_state = ev["transition"]
+
+            # 不 emit、不 append
+            self.replay_pointer += 1
+            return next_state
         else:
             sm_output = enriched.get("output", {})
             exit_event = {
@@ -303,12 +344,13 @@ class Orchestrator:
                 "status": sm_output.get("status"),
                 "sm_output": sm_output,
                 "metadata": metadata.copy() if metadata else None,
-                "ctx_delta": child_ctx.diff(self.ctx) if hasattr(child_ctx, "diff") else None,
+                "ctx_delta": child_ctx.dump_writes() if hasattr(child_ctx, "dump_writes") else None,
                 "transition": next_state,
             }
             self.emit(exit_event)
             rehearsal.event_log.append(exit_event)
-            
+            return next_state
+        
     def get_current_id(self, pointer: int) -> Optional[str]:
         if pointer < len(self.replay_events):
             return self.replay_events[pointer].get("id")

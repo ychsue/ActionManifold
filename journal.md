@@ -1,3 +1,5 @@
+# [2026-02-21] 通過 Replay 的測試，先這樣，trace看起來好像也正常
+
 # [2026-02-17] 準備一步一步完成 replay/resume/simulate
 
 # [2026-02-15] 準備自己寫一下想像中的 Orchestrator
