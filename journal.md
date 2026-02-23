@@ -1,3 +1,5 @@
+# [2026-02-23] Copilot 準備重構 orchestrator.py，有點危險，先 commit
+
 # [2026-02-23] 通過 resume 測試，但正在請 Copilot 優化中
 
 # [2026-02-21] 通過 Replay 的測試，先這樣，trace看起來好像也正常

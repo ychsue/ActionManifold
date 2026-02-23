@@ -168,42 +168,8 @@ class Orchestrator:
 
         while True:
             # 1. 根據 rehearsal 決定是要記錄還是取回 event，以及是否要真正執行 child
-            ## 1.1 先初始化
-            restore_event = False
-            pass_execution = False
-            # --- 最小可用 replay：只處理 replay 模式 ---
-            if rehearsal.mode == "replay":
-                restore_event = True
-                pass_execution = True
-            else:
-                restore_event = False
-                pass_execution = False
-            # vvvvv 以下1.2先忽略，先調好 replay vvvvvv
-            ## 1.2 再細調
-            if rehearsal.mode == "replay":
-                if rehearsal.level in ["orch"] or (rehearsal.level == "state" and self.playbook.is_state_machine(current_state)):
-                    pass_execution = True
-                else:
-                    pass_execution = False
-            elif rehearsal.mode == "resume":
-                current_pointer = self.replay_pointer
-                if rehearsal.exec_status == "replay":
-                    if self.get_current_id(current_pointer) not in rehearsal.unpaired_event_ids:
-                        restore_event = True
-                        pass_execution = True
-                    else:
-                        restore_event = False
-                        pass_execution = False
-                        if self.get_current_id(current_pointer) == rehearsal.resume_from_event_id:
-                            rehearsal.exec_status = "running"
-                elif rehearsal.exec_status == "running":
-                    restore_event = False
-                    pass_execution = False
-                    if rehearsal.stop_at is not None and self.get_current_state_name(current_pointer) == rehearsal.stop_at:
-                        rehearsal.exec_status = "stopped"
-                elif rehearsal.exec_status == "stopped":
-                    restore_event = True
-                    pass_execution = True
+            restore_event, pass_execution, next_exec_status = self._decide_execution_mode(rehearsal, current_state)
+            rehearsal.exec_status = next_exec_status
 
             event_id = self.before_ini_child(
                 current_state, 
@@ -365,6 +331,53 @@ class Orchestrator:
         if pointer < len(self.replay_events):
             return self.replay_events[pointer].get("state")
         return None
+
+    def _decide_execution_mode(self, rehearsal: Rehearsal, current_state: str) -> tuple[bool, bool, Literal["replay", "running", "stopped", None]]:
+        """
+        回傳：
+        - restore_event: 是否從 event_log mimic
+        - pass_execution: 是否跳過 child.run
+        - next_exec_status: replay / running / stopped
+        """
+
+        # --- NORMAL 模式 ---
+        if rehearsal.mode == "normal":
+            return False, False, rehearsal.exec_status
+
+        # --- REPLAY 模式 ---
+        if rehearsal.mode == "replay":
+            return True, True, rehearsal.exec_status
+
+        # --- RESUME 模式 ---
+        pointer = self.replay_pointer
+        current_event_id = self.get_current_id(pointer)
+
+        # 1. replay 階段：補前半段
+        if rehearsal.exec_status == "replay":
+            if current_event_id not in rehearsal.unpaired_event_ids:
+                # 這個 event 已經完整（before+after），可以 mimic
+                return True, True, "replay"
+            else:
+                # 這個 event 是中斷點
+                if current_event_id == rehearsal.resume_from_event_id:
+                    # 切換到 running
+                    return False, False, "running"
+                else:
+                    # 還沒到 resume_from_event_id
+                    return False, False, "replay"
+
+        # 2. running 階段：執行後半段
+        if rehearsal.exec_status == "running":
+            # 若有 stop_at，遇到該 state 就停止
+            if rehearsal.stop_at is not None and current_state == rehearsal.stop_at:
+                return True, True, "stopped"
+            return False, False, "running"
+
+        # 3. stopped 階段：mimic 後續
+        if rehearsal.exec_status == "stopped":
+            return True, True, "stopped"
+
+        raise RuntimeError("Unknown exec_status")
         
 def prepare_resume(rehearsal: Rehearsal):
     """

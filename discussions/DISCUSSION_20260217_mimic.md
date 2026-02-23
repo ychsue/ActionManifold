@@ -1680,3 +1680,228 @@ resume = replay(已完成的部分，不 emit)
 ## [2026-02-22] ychsue 做了些小修改，讓他能跑 [[/tests\runtime\test_resume_nested.py]]，但是，他竟然只執行了 'Z'，看來要思考一下 Resume 在 nested 情況下，怎麼判斷由哪個點後開始完整跑
 
 目前看起來，至少 unpaired_event_ids 取法出問題
+
+[2026-02-23] 已經可以跑通 resume 了
+
+### Copilot's Answer 09
+
+Young‑Chung，我看完你貼的完整 `orchestrator.py`，也看了你目前的 resume 測試、nested replay 測試、以及你剛剛的修改。  
+我可以很肯定地說：
+
+**是的，現在非常值得重構 `orchestrator.py`，而且你已經把所有重構的理由都踩到了。**
+
+而且你現在的狀態非常好——  
+你已經把 replay、nested replay、resume 的語意都「跑通」，  
+接下來就是把這些語意「固化成乾淨的架構」。
+
+我來幫你整理一下你現在的 orchestrator 的狀況，  
+然後給你一個「重構方向」與「重構後的樣子會長什麼樣」。
+
+---
+
+#### 🌟 你現在的 orchestrator.py：語意正確，但邏輯開始變複雜
+
+你目前的版本其實已經能支援：
+
+- normal run  
+- replay  
+- nested replay  
+- resume（含 nested resume）  
+- stop_at（雖然還沒 fully 實作）  
+
+這已經是非常強大的功能。
+
+但你也看到了：
+
+###### ❗ before_ini_child 前的邏輯越來越複雜  
+你現在的 `_decide_execution_mode()` 已經有：
+
+- mode = normal / replay / resume  
+- exec_status = replay / running / stopped  
+- unpaired_event_ids  
+- resume_from_event_id  
+- stop_at  
+- replay_pointer  
+- nested replay_events  
+
+這些東西混在一起，會讓：
+
+- 未來 simulate 很難加  
+- 未來 UI inspect 很難加  
+- 未來 resume-from-subflow 很難加  
+- 未來 nested resume-from-subflow 更難加  
+- 未來 stop_at（state-level / sm-level）也會變得很難維護  
+
+你現在的 orchestrator.py 已經到了「語意正確，但需要重構」的階段。
+
+---
+
+#### 🌟 你現在的 `_decide_execution_mode()` 已經是正確方向，但還不夠乾淨
+
+你現在的版本：
+
+```python
+if rehearsal.mode == "normal": ...
+if rehearsal.mode == "replay": ...
+if rehearsal.mode == "resume": ...
+```
+
+這是正確的。
+
+但 resume 的邏輯還是混在一起：
+
+- replay 階段  
+- running 階段  
+- stopped 階段  
+
+而且 resume 的語意其實是：
+
+```
+resume = replay(已完成) → running(未完成) → stopped(如果 stop_at)
+```
+
+這三個階段應該拆開，而不是混在一個 if/else 裡。
+
+---
+
+#### 🌟 你現在的 prepare_resume() 也需要重構
+
+你現在的版本：
+
+- 找 resume_from_event_id  
+- 切 event_log_resume  
+- 找 unpaired_event_ids  
+- 設 exec_status="replay"  
+
+語意是對的，但：
+
+- resume_from_event_id 的語意應該是「從這個 state 的 after_decision 之後開始 running」  
+- event_log_resume 的語意應該是「resume 前半段的 replay 視野」  
+- unpaired_event_ids 的語意應該是「哪些 before_ini_child 沒有 after_decision」  
+
+這些語意都正確，但現在的程式碼比較 procedural，  
+未來會越來越難維護。
+
+---
+
+#### 🌟 你問的問題：「是否應該重構 orchestrator.py？」  
+##### ✔ 我的答案：**是，而且現在就是最佳時機。**
+
+因為：
+
+- replay 已經穩了  
+- nested replay 已經穩了  
+- resume 已經穩了  
+- nested resume 也能跑  
+- stop_at 還沒實作，但你已經有測試方向  
+- simulate 還沒開始，但會需要乾淨的架構  
+
+現在重構，未來會非常輕鬆。
+
+---
+
+#### 🌟 我建議的重構方向（這是我會幫你做的）
+
+##### 1. 把 replay/resume 的語意拆成三個階段：
+
+```
+REPLAY_PHASE:
+    restore_event=True
+    pass_execution=True
+
+RUNNING_PHASE:
+    restore_event=False
+    pass_execution=False
+
+STOPPED_PHASE:
+    restore_event=True
+    pass_execution=True
+```
+
+這三個階段要變成獨立的邏輯，而不是混在一起。
+
+---
+
+##### 2. `_decide_execution_mode()` 要變成一個「狀態機」
+
+現在的版本是 if/else，  
+但其實它應該是：
+
+```
+if mode == normal:
+    return RUNNING_PHASE
+
+if mode == replay:
+    return REPLAY_PHASE
+
+if mode == resume:
+    if exec_status == replay:
+        if current_event_id in unpaired_event_ids:
+            if current_event_id == resume_from_event_id:
+                return RUNNING_PHASE
+            else:
+                return REPLAY_PHASE
+        else:
+            return REPLAY_PHASE
+
+    if exec_status == running:
+        if stop_at and current_state == stop_at:
+            return STOPPED_PHASE
+        return RUNNING_PHASE
+
+    if exec_status == stopped:
+        return REPLAY_PHASE
+```
+
+這樣 resume 的語意會非常清楚。
+
+---
+
+##### 3. prepare_resume() 要變成「resume 視野建構器」
+
+現在的版本是 procedural，  
+但應該變成：
+
+```
+resume_view = build_resume_view(event_log, resume_from_event_id)
+unpaired_event_ids = find_unpaired(resume_view)
+exec_status = "replay"
+```
+
+這樣 resume 的語意會更乾淨。
+
+---
+
+##### 4. stop_at 要整合進 resume 的 state machine
+
+stop_at 的語意是：
+
+```
+在 running 階段遇到 stop_at → 切換到 stopped 階段
+```
+
+這個語意非常自然。
+
+---
+
+#### 🌟 我可以幫你做什麼？
+
+如果你願意，我可以直接幫你：
+
+###### ✔ 重構 orchestrator.py（完整版本，語意乾淨、可維護）  
+###### ✔ 保留你現在所有功能（replay / nested replay / resume / nested resume）  
+###### ✔ 加入 stop_at 的完整語意  
+###### ✔ 預留 simulate 的 hook  
+###### ✔ 讓整個 orchestrator 變成一個真正的「三階段狀態機」  
+
+你只要告訴我：
+
+👉 **「請幫我重構 orchestrator.py」**
+
+我就會給你：
+
+- 完整重構後的 orchestrator.py  
+- 完全相容你現在的測試  
+- 語意更乾淨、更穩定、更容易擴充  
+
+你想現在就開始嗎？
