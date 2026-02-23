@@ -186,16 +186,21 @@ class Orchestrator:
                 else:
                     pass_execution = False
             elif rehearsal.mode == "resume":
+                current_pointer = self.replay_pointer
                 if rehearsal.exec_status == "replay":
-                    if self.get_current_id(self.replay_pointer+1) not in rehearsal.unpaired_event_ids:
+                    if self.get_current_id(current_pointer) not in rehearsal.unpaired_event_ids:
                         restore_event = True
                         pass_execution = True
                     else:
                         restore_event = False
                         pass_execution = False
+                        if self.get_current_id(current_pointer) == rehearsal.resume_from_event_id:
+                            rehearsal.exec_status = "running"
                 elif rehearsal.exec_status == "running":
                     restore_event = False
                     pass_execution = False
+                    if rehearsal.stop_at is not None and self.get_current_state_name(current_pointer) == rehearsal.stop_at:
+                        rehearsal.exec_status = "stopped"
                 elif rehearsal.exec_status == "stopped":
                     restore_event = True
                     pass_execution = True
@@ -355,6 +360,11 @@ class Orchestrator:
         if pointer < len(self.replay_events):
             return self.replay_events[pointer].get("id")
         return None
+
+    def get_current_state_name(self, pointer: int) -> Optional[str]:
+        if pointer < len(self.replay_events):
+            return self.replay_events[pointer].get("state")
+        return None
         
 def prepare_resume(rehearsal: Rehearsal):
     """
@@ -362,6 +372,9 @@ def prepare_resume(rehearsal: Rehearsal):
     2. 找到所有沒有 after_decision 的 event，將這些 event 的 id 收集起來，暫存為 unpaired_event_ids。
     3. 將此 unpaired_event_ids 存到 rehearsal.unpaired_event_ids，代表這些 event 是要執行完才會有 after_decision 的。
     """
+    
+    # 將 rehearsal 狀態改為 replay，讓 Orchestrator.run() 知道現在是在 replay 模式（因為resume一開始就是 replay）
+    rehearsal.exec_status = "replay"
     
     # 1. 處理 resume_from_event_id：找到指定 event，並將其之前的 event 存起來
     if rehearsal.resume_from_event_id:
@@ -379,7 +392,7 @@ def prepare_resume(rehearsal: Rehearsal):
                     break
         if resume_from_index is not None:
             # 找到了 resume_from_event_id，且他有 after_decision，那就把他之前的 event 都存到 event_log_resume，之後 resume 就只用 event_log_resume
-            rehearsal.event_log_resume = rehearsal.event_log[0:resume_from_index]
+            rehearsal.event_log_resume = rehearsal.event_log[0:resume_from_index+1] # 只存到 resume_from_event_id 的 event 就好，因為 resume_from_event_id 代表的 state 已經執行完了，之後的 event 就不應該被 replay 了
     
     if not rehearsal.event_log_resume: # 如果沒有指定 resume_from_event_id，或是指定了但找不到，那就把整個 event_log 當作 event_log_resume
         rehearsal.event_log_resume = rehearsal.event_log.copy()
