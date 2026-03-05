@@ -1,107 +1,476 @@
-from inspect import isclass
+# src/am_core/orchestrator.py
 
-from .feature.feature_unit import feature_unit
-from .leak_monitor import LeakMonitor, leak_orch_checked_run
-from .context import OrchCtx, StateCtx, CtxBus, WorldCtx
-from pathlib import Path
-from typing import Optional
+from __future__ import annotations
+from dataclasses import dataclass, field
+from typing import Any, Dict, List, Literal, Optional
+import asyncio
+import time
 
-@feature_unit(
-    belongs_to=["RuntimeEngine"],
-    status="planned",
-    display_name="Orchestrator Execution",
-    notes="執行 playbook，驅動 StateMachine / 子 Orchestrator，並維護 OrchCtx"
-)
+from am_core.ctx.ctx_wrapper import CtxDeltaCollector, WrappedCtx
+from am_core.state_machine import StateMachine
+from .ctx.context import Ctx
+from .run_watcher import run_watcher
+from .decision_block import decision_block
+from .playbook import Playbook
+from .utils import generate_event_id
+
+
+# ------------------------------------------------------------
+# Rehearsal metadata
+# ------------------------------------------------------------
+
+@dataclass
+class Rehearsal:
+    mode: Literal["normal", "replay", "resume", "simulate"] = "normal"
+    event_log: List[Dict[str, Any]] = field(default_factory=list)
+
+    # resume 專用
+    event_log_resume: List[Dict[str, Any]] = field(default_factory=list)
+    resume_from_event_id: Optional[str] = None
+    unpaired_event_ids: List[str] = field(default_factory=list)
+
+    # runtime pointer
+    pointer: int = 0
+
+    # runtime control
+    stop_at: Optional[str] = None
+    exec_status: Literal["replay", "running", "stopped"] = "running"
+
+    # decision override（未來用）
+    decision_override: Dict[str, Any] = field(default_factory=dict)
+
+    # replay level（目前保留）
+    level: Literal["orch", "state", "sm"] = "orch"
+
+    def advance(self):
+        self.pointer += 1
+
+    def current_event(self):
+        if self.pointer < len(self.event_log):
+            return self.event_log[self.pointer]
+        return None
+
+
+# ------------------------------------------------------------
+# Orchestrator
+# ------------------------------------------------------------
+
+REPLAY_MIMIC = "replay_mimic"
+REPLAY_EXECUTE = "replay_execute"
+REPLAY_PHASE = "replay"
+RUNNING_PHASE = "running"
+STOPPED_PHASE = "stopped"
+
+
 class Orchestrator:
     """
-    Orchestrator 負責依照 playbook 執行整個 workflow。
+    Orchestrator：執行多個 child（SM / Orchestrator / World）
     """
-    playbook: dict
-    def __init__(self, name, playbook: dict, parent_orch: Optional["Orchestrator"], worldCtx: WorldCtx, ctxBus: CtxBus):
-        LeakMonitor.track_orchestrator(self)
-        self.name = name
+
+    def __init__(
+        self,
+        playbook: Playbook,
+        ctx: Ctx,
+        parent: Optional[Any] = None,
+        *,
+        metadata: Optional[Dict[str, Any]] = None,
+        name: Optional[str] = None,
+    ) -> None:
         self.playbook = playbook
-        self.parent_orch = parent_orch
-        self.worldCtx = worldCtx
-        self.ctxBus = ctxBus
-        self.orchCtx = OrchCtx(name, parent_orch.orchCtx if parent_orch else None)
+        self.ctx = ctx
+        self.parent = parent
+        self.metadata: Dict[str, Any] = metadata or {}
+        self.name = name
+        self.events: List[Dict[str, Any]] = []
 
-    def report(self, event):
-        # bubble to parent orchestrator
-        if self.parent_orch:
-            self.parent_orch.report(event)
+        # rehearsal 初始化
+        if self.ctx.get("rehearsal") is None:
+            self.ctx.set("rehearsal", Rehearsal())
+
+        if self.ctx.get("root_ctx") is None:
+            self.ctx.set("root_ctx", {"i_th": 0})
+
+        rehearsal: Rehearsal = self.ctx.get("rehearsal")
+
+        # resume 模式：建構 resume 視野
+        if rehearsal.mode == "resume" and rehearsal.event_log_resume == []:
+            prepare_resume(rehearsal)
+
+        # nested replay 視野切割
+        self.replay_events = [
+            ev for ev in rehearsal.event_log
+            if ev.get("parent_state") == self.ctx.get("current_state")
+        ]
+        self.replay_pointer = 0
+
+    # ------------------------------------------------------------
+    # event 冒泡
+    # ------------------------------------------------------------
+    def emit(self, event: Dict[str, Any]) -> None:
+        self.events.append(event)
+        if self.parent and hasattr(self.parent, "emit"):
+            self.parent.emit(event)
+
+    # ------------------------------------------------------------
+    # child instantiate
+    # ------------------------------------------------------------
+    def _instantiate_child(self, state_name: str, child_ctx: Ctx, ctor: dict):
+        cls = ctor["class"]
+        subflow = ctor.get("subflow")
+
+        from .orchestrator import Orchestrator
+
+        if issubclass(cls, Orchestrator):
+            if subflow is None:
+                raise ValueError(f"State {state_name} uses Orchestrator but no subflow provided")
+            return cls(playbook=subflow, ctx=child_ctx, parent=self, name=state_name)
+
+        if issubclass(cls, StateMachine):
+            wrapped_ctx = WrappedCtx(child_ctx, CtxDeltaCollector())
+            return cls(wrapped_ctx=wrapped_ctx, parent=self, name=state_name)
+
+        raise TypeError(f"Unsupported constructor class for state {state_name}: {cls}")
+
+    # ------------------------------------------------------------
+    # replay helper
+    # ------------------------------------------------------------
+    def _replay_current_event(self):
+        if self.replay_pointer < len(self.replay_events):
+            return self.replay_events[self.replay_pointer]
+        return None
+
+    # ------------------------------------------------------------
+    # 主 runtime loop
+    # ------------------------------------------------------------
+    async def run(self, metadata: Optional[Dict[str, Any]] = None, mode: str = "normal") -> Dict[str, Any]:
+        rehearsal: Rehearsal = self.ctx.get("rehearsal")
+
+        if metadata is None:
+            metadata = self.metadata
         else:
-            # top-level → worldCtx
-            self.worldCtx.log_event(event)
+            self.metadata = metadata
 
-        # broadcast to ctxBus
-        self.ctxBus.publish(event)
-        
-    def cleanup(self):
-        self.orchCtx.children.clear()
-        self.orchCtx.parent = None
+        current_state = self.playbook.initial_state()
+        final_state: Optional[str] = None
 
-    # @leak_orch_checked_run
-    async def run(self, auto_sequence=True):
-        current = self.playbook["initial"]
-        final_states = self.playbook.get("final", [])
-        states = self.playbook["states"]
+        loop = asyncio.get_event_loop()
+        parent_state = self.ctx.get("current_state")
 
         while True:
-            cls = self.playbook["registry"][current]
+            # ------------------------------------------------------------
+            # 1. 決定當前 state 的執行模式（replay / running / stopped）
+            # ------------------------------------------------------------
+            phase = self._decide_execution_mode(rehearsal, current_state)
+            # 預設為 RUNNING_PHASE，但在 replay 模式下會根據 pointer 和 resume_from_event_id 切換到 REPLAY_MIMIC / REPLAY_EXECUTE / STOPPED_PHASE
+            restore_event = phase in (REPLAY_PHASE, REPLAY_MIMIC, STOPPED_PHASE)
+            pass_execution = phase in (REPLAY_PHASE, REPLAY_MIMIC, STOPPED_PHASE)
+            rehearsal.exec_status = REPLAY_PHASE if phase in (REPLAY_MIMIC, REPLAY_EXECUTE) else phase
 
-            # 子 orchestrator
-            if isclass(cls) and issubclass(cls, Orchestrator):
-                child = cls(
-                    name=f"{self.name}.{current}",
-                    playbook=cls.playbook,
-                    parent_orch=self,
-                    worldCtx=self.worldCtx,
-                    ctxBus=self.ctxBus,
+            # ------------------------------------------------------------
+            # 2. before_ini_child
+            # ------------------------------------------------------------
+            event_id = self.before_ini_child(
+                current_state,
+                parent_state,
+                rehearsal,
+                restore_event=restore_event,
+            )
+            # TODO: 先將 Stop 跳出 loop
+            if rehearsal.exec_status == STOPPED_PHASE:
+                final_state = current_state
+                break
+            
+            # ------------------------------------------------------------
+            # 3. instantiate child
+            # ------------------------------------------------------------
+            state_def, child_ctx, child = self.ini_child(current_state, parent_state)
+
+            enriched = {}
+            next_state = None
+
+            # ------------------------------------------------------------
+            # 4. 執行 child.run（若不是 replay/stopped）
+            # ------------------------------------------------------------
+            if not pass_execution:
+                sm_output, timeout_flag, start_time, end_time = await self.exec_child(
+                    state_def, child, loop, mode=mode
                 )
-                self.orchCtx.add_child(child.orchCtx)
-                await child.run()
 
-            # atomic state
-            else:
-                sm_ctx = StateCtx(f"{self.name}.{current}", self.orchCtx)
-                self.orchCtx.add_child(sm_ctx)
-                sm = cls(sm_ctx, self)
-                await sm.run()
-                # merge stateCtx → orchCtx
-                self.orchCtx.exposure.update(sm_ctx.exposure)
+                # TODO: 不確定未來是否stop要這樣處理，先這樣寫，之後再優化
+                if rehearsal.exec_status == STOPPED_PHASE: # 執行後可能會變，所以，需要再檢查一次
+                    final_state = current_state
+                    break
+                
+                enriched = run_watcher(
+                    state_name=current_state,
+                    state_def=state_def,
+                    sm_output=sm_output,
+                    metadata=self.metadata,
+                    start_time=start_time,
+                    end_time=end_time,
+                    timeout_flag=timeout_flag,
+                    parent_state=parent_state,
+                )
 
+                event = enriched["event"]
+                self.emit(event)
 
-            # 如果是終止 state，結束執行
-            if current in final_states:
+                next_state = decision_block(
+                    playbook=self.playbook,
+                    current_state=current_state,
+                    enriched_output=enriched,
+                )
+
+            # ------------------------------------------------------------
+            # 5. after_decision（mimic 或 record）
+            # ------------------------------------------------------------
+            next_state = self.after_decision(
+                event_id,
+                metadata,
+                current_state,
+                parent_state,
+                enriched,
+                child_ctx,
+                next_state,
+                rehearsal,
+                restore_event=restore_event,
+            )
+
+            # ------------------------------------------------------------
+            # 6. 結束條件
+            # ------------------------------------------------------------
+            if next_state is None:
+                final_state = current_state
                 break
 
-            # 找下一個 state
-            next_state = self._next_state(current)
-            if not next_state:
-                if not auto_sequence:
-                    break
-                # if no next state, choose the next state in `states` list
-                current_index = states.index(current)
-                if current_index + 1 < len(states):
-                    current = states[current_index + 1]
-                else:
-                    break
+            current_state = next_state
+
+        return {
+            "final_state": final_state,
+            "metadata": self.metadata,
+            "events": self.events,
+        }
+
+    # ------------------------------------------------------------
+    # before_ini_child
+    # ------------------------------------------------------------
+    def before_ini_child(self, current_state: str, parent_state: str, rehearsal: Rehearsal, restore_event: bool) -> str:
+        root_ctx = self.ctx.get("root_ctx")
+        root_ctx["i_th"] += 1
+        isStopped = rehearsal.exec_status == STOPPED_PHASE
+
+        if restore_event and isStopped is False:
+            ev = self._replay_current_event()
+            if ev is None:
+                raise RuntimeError("Replay pointer out of range")
+            if ev["kind"] != "before_ini_child":
+                raise RuntimeError("Replay mismatch: expected before_ini_child")
+
+            event_id = ev["id"]
+            self.replay_pointer += 1
+            return event_id
+
+        # normal / running
+        event_id = generate_event_id() + f"-{root_ctx.get('i_th')-1}" if not isStopped else STOPPED_PHASE
+        loop_event = {
+            "id": event_id,
+            "kind": "before_ini_child" if not isStopped else "before_ini_child_stopped",
+            "state": current_state,
+            "parent_state": parent_state,
+            "timestamp": time.time(),
+        }
+        self.emit(loop_event)
+        rehearsal.event_log.append(loop_event)
+        return event_id
+
+    # ------------------------------------------------------------
+    # ini_child
+    # ------------------------------------------------------------
+    def ini_child(self, current_state: str, parent_state: str):
+        state_def = self.playbook.get_state_def(current_state)
+        ctor = self.playbook.get_state_constructor(current_state)
+        child_ctx = self.ctx.child(current_state=current_state, parent_state=parent_state)
+        child = self._instantiate_child(current_state, child_ctx, ctor)
+        return state_def, child_ctx, child
+
+    # ------------------------------------------------------------
+    # exec_child
+    # ------------------------------------------------------------
+    async def exec_child(self, state_def, child, loop, mode):
+        timeout_setting = state_def.get("timeout")
+        timeout_flag = False
+        start_time = loop.time()
+
+        try:
+            if timeout_setting is not None:
+                sm_output = await asyncio.wait_for(
+                    child.run(self.metadata, mode=mode),
+                    timeout=float(timeout_setting),
+                )
             else:
-                current = next_state
+                sm_output = await child.run(self.metadata, mode=mode)
+        except asyncio.TimeoutError:
+            sm_output = {"status": "timeout"}
+            timeout_flag = True
 
-    def _next_state(self, current):
-        transitions = self.playbook.get("transitions", [])
-        for t in transitions:
-            if t["from"] != current:
-                continue
+        end_time = loop.time()
+        return sm_output, timeout_flag, start_time, end_time
 
-            cond = t.get("condition")
-            if not cond:
-                return t["to"]
+    # ------------------------------------------------------------
+    # after_decision
+    # ------------------------------------------------------------
+    def after_decision(
+        self,
+        event_id,
+        metadata,
+        current_state,
+        parent_state,
+        enriched,
+        child_ctx,
+        next_state,
+        rehearsal,
+        restore_event,
+    ):
+        if restore_event:
+            ev = self._replay_current_event()
+            if ev is None:
+                raise RuntimeError("Replay pointer out of range")
+            if ev["kind"] != "after_decision":
+                raise RuntimeError("Replay mismatch: expected after_decision")
 
-            cond_fn = self.playbook["condition_registry"].get(cond)
-            if cond_fn and cond_fn(self.orchCtx):
-                return t["to"]
+            if ev.get("ctx_delta"):
+                child_ctx.apply_writes(ev["ctx_delta"])
 
+            if ev.get("metadata"):
+                self.metadata = ev["metadata"]
+
+            next_state = ev["transition"]
+            self.replay_pointer += 1
+            return next_state
+
+        # running
+        enriched_event = enriched.get("event", {}) or {}
+        sm_output = enriched_event.get("output", {}) or {}
+        # 如果是SM，要套用 ctx_delta 與 metadata_delta
+        if sm_output.get("is_SM"):
+            if sm_output.get("ctx_delta"):
+                child_ctx.apply_writes(sm_output["ctx_delta"], into_writes=True)
+
+            if sm_output.get("metadata_delta"):
+                self.metadata.update(sm_output["metadata_delta"])
+        exit_event = {
+            "id": event_id,
+            "kind": "after_decision",
+            "timestamp": time.time(),
+            "state": current_state,
+            "parent_state": parent_state,
+            "status": sm_output.get("status"),
+            "sm_output": sm_output,
+            "metadata": metadata.copy() if metadata else None,
+            "ctx_delta": child_ctx.dump_writes() if hasattr(child_ctx, "dump_writes") else None,
+            "transition": next_state,
+        }
+        self.emit(exit_event)
+        rehearsal.event_log.append(exit_event)
+        return next_state
+
+    # ------------------------------------------------------------
+    # replay helpers
+    # ------------------------------------------------------------
+    def get_current_id(self, pointer):
+        if pointer < len(self.replay_events):
+            return self.replay_events[pointer].get("id")
         return None
+
+    def get_current_state_name(self, pointer):
+        if pointer < len(self.replay_events):
+            return self.replay_events[pointer].get("state")
+        return None
+
+    # ------------------------------------------------------------
+    # 決定執行模式（phase）
+    # ------------------------------------------------------------
+    def _decide_execution_mode(self, rehearsal: Rehearsal, current_state: str):
+        # normal
+        if rehearsal.mode == "normal":
+            if rehearsal.stop_at == current_state:
+                return STOPPED_PHASE
+            return RUNNING_PHASE
+
+        # replay
+        if rehearsal.mode == "replay":
+            if rehearsal.stop_at == current_state:
+                return STOPPED_PHASE
+            return REPLAY_PHASE
+
+        # resume
+        return self._decide_resume_phase(rehearsal, current_state)
+
+    # ------------------------------------------------------------
+    # resume phase machine
+    # ------------------------------------------------------------
+    def _decide_resume_phase(self, rehearsal: Rehearsal, current_state: str):
+        pointer = self.replay_pointer
+        current_event_id = self.get_current_id(pointer)
+
+        # 1. replay 階段
+        if rehearsal.exec_status == REPLAY_PHASE:
+            if current_event_id not in rehearsal.unpaired_event_ids:
+                return REPLAY_MIMIC
+
+            # 遇到 resume_from_event_id → 切換到 running
+            if current_event_id == rehearsal.resume_from_event_id:
+                return RUNNING_PHASE
+
+            return REPLAY_EXECUTE
+
+        # 2. running 階段
+        if rehearsal.exec_status == RUNNING_PHASE:
+            if rehearsal.stop_at == current_state:
+                return STOPPED_PHASE
+            return RUNNING_PHASE
+
+        # 3. stopped 階段
+        if rehearsal.exec_status == STOPPED_PHASE:
+            return REPLAY_PHASE
+
+        raise RuntimeError("Unknown exec_status")
+
+
+# ------------------------------------------------------------
+# prepare_resume
+# ------------------------------------------------------------
+
+def prepare_resume(rehearsal: Rehearsal):
+    rehearsal.exec_status = REPLAY_PHASE
+
+    # 1. 切 resume 視野
+    if rehearsal.resume_from_event_id:
+        resume_from_index = None
+        for i, ev in enumerate(rehearsal.event_log):
+            if ev.get("id") == rehearsal.resume_from_event_id and ev.get("kind") == "before_ini_child":
+                stop_event_id = ev.get("id")
+                has_after = any(
+                    e for e in rehearsal.event_log
+                    if e.get("kind") == "after_decision" and e.get("id") == stop_event_id
+                )
+                if has_after:
+                    resume_from_index = i
+                    break
+
+        if resume_from_index is not None:
+            rehearsal.event_log_resume = rehearsal.event_log[:resume_from_index+1]
+
+    if not rehearsal.event_log_resume:
+        rehearsal.event_log_resume = rehearsal.event_log.copy()
+
+    # 2. 找 unpaired events
+    unpaired = set()
+    for ev in rehearsal.event_log_resume:
+        if ev.get("kind") == "before_ini_child":
+            unpaired.add(ev["id"])
+        elif ev.get("kind") == "after_decision":
+            if ev["id"] in unpaired:
+                unpaired.remove(ev["id"])
+
+    rehearsal.unpaired_event_ids = list(unpaired)

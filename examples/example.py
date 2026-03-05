@@ -1,7 +1,7 @@
 from sympy import im
 from am_core.state_machine import StateMachine, WorldRunner
 from am_core.orchestrator import Orchestrator
-from am_core.context import WorldCtx, CtxBus
+from am_core.ctx.context import WorldCtx, CtxBus
 from pathlib import Path
 from am_core.leak_monitor import LeakMonitor
 import asyncio
@@ -9,21 +9,21 @@ import asyncio
 class InputName(StateMachine):
     async def run(self):
         self.emit("progress", {"msg": "開始輸入名稱"})
-        self.ctx.set("name_entered", True)
+        self.wrapped_ctx.set("name_entered", True)
         self.emit("progress", {"msg": "名稱輸入完成"})
 
 class KeyIn(StateMachine):
     async def run(self):
         self.emit("progress", {"msg": "輸入密碼中"})
-        self.ctx.set("password", "1234")
+        self.wrapped_ctx.set("password", "1234")
 
 class Check(StateMachine):
     async def run(self):
-        pwd = self.ctx.get("password")
+        pwd = self.wrapped_ctx.get("password")
         if pwd == "1234":
-            self.ctx.set("password_ok", True)
+            self.wrapped_ctx.set("password_ok", True)
         else:
-            self.ctx.set("password_bad", True)
+            self.wrapped_ctx.set("password_bad", True)
 
 class Success(StateMachine):
     async def run(self):

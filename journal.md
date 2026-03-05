@@ -1,3 +1,83 @@
+# [2026-03-04] 修改Copilot's Answer，讓 ctx_wrapper.py 能運作
+
+1. [ctx_wrapper.py](src\am_core\ctx\ctx_wrapper.py) 的
+``` py
+        # 多加先確定 key 在 delta 裡沒有被 set 過，才從 real ctx 讀取
+        for op, k, v in reversed(self._delta.ops):
+            if k == key:
+                return v
+```
+2. `metadata_delta` 好像沒有 metadata wrapper
+3. 我想，不需要 `ctx_apply`
+4. 通過65個測試
+
+# [2026-02-24] 將 stop_at 也加進去
+
+# [2026-02-23] Copilot 準備重構 orchestrator.py，有點危險，先 commit
+
+# [2026-02-23] 通過 resume 測試，但正在請 Copilot 優化中
+
+# [2026-02-21] 通過 Replay 的測試，先這樣，trace看起來好像也正常
+
+# [2026-02-17] 準備一步一步完成 replay/resume/simulate
+
+# [2026-02-15] 準備自己寫一下想像中的 Orchestrator
+
+# [2026-02-10] 繼續準備，多了一個 ctx["rehearsal"] 的 class
+1. [orchestrator.py](src\am_core\orchestrator.py) 將 event_log 與 emit 分開來存。
+
+# [2026-02-09] 做了點小修改，預備開始實作 resume
+
+# [2026-02-06] 整個 playbook 的 schema 修改
+1. 現在長
+``` py
+PlaybookDict {
+    "initial": str,
+    "final": [str],
+    "states": [
+        {
+            "name": str,
+            "to": Optional[str],
+            "switch": Optional[dict[str,str]],
+            "timeout": Optional[number],
+            "retry_times": Optional[number],
+
+            # constructor info
+            "class": Optional[str],        # Python class path
+            "subflow": Optional[str|dict], # nested Playbook
+            "builtin": Optional[str],      # "Success", "Error", ...
+            "workdir": Optional[str],      # reserved for WORLD
+        }
+    ],
+    "registry": {
+        stateName: {
+            "class": Optional[type],       # Python class
+            "subflow": Optional[Playbook], # nested Playbook
+            "workdir": Optional[str],
+        } | StateMachine
+    }
+}
+```
+2. 其他的就搭配他修改
+
+
+# [2026-02-04] 已經有新的 orch, SM 了
+不過，
+1. orchestrator 是使用各別的class 繼承 Orchestrator，若沒有提供，則是直接使用 Orchestrator
+2. 我在 [playbook.py](src\am_core\playbook.py) 多加了
+   ``` py
+    entry = self.registry[state]
+    playbook = entry.get("playbook")
+    playbook = Playbook(playbook, base_path=self.base_path) if isinstance(playbook, dict) else playbook
+   ```
+   不曉得這樣能否也接受使用者直接將playbook 寫在 register 裡面，而形成巢狀？
+
+# [2026-02-02] runtime 設計中，以Test First 來設計，謝謝Copilot
+
+1. playbook 有一個物件來管理：  [test_playbook_wrapper.py](tests\runtime\test_playbook_wrapper.py) -> [playbook.py](src\am_core\playbook.py)
+2. run_watcher 來包裝run的結果，不過，他不包住 run [test_run_watcher.py](tests\runtime\test_run_watcher.py) -> [run_watcher](src\am_core\run_watcher.py)
+3. decision_block 用來切換 state [test_decision_block.py](tests\runtime\test_decision_block.py) -> [decision_block.py](src\am_core\decision_block.py)
+
 # [2026-01-28] 我得先回來 runtime 的設計
 
 1. 參考 [DISCUSSION_dev_run.md](discussions\DISCUSSION_dev_run.md) 的最後一個討論，先完成 runtime

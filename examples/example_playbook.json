@@ -1,0 +1,26 @@
+{
+  "initial": "StartState",
+  "final": ["Success", "Error"],
+  "states": [
+    {
+      "name": "StartState",
+      "type": "python:myapp.states.StartState",
+      "to": "NextState"
+    },
+    {
+      "name": "NextState",
+      "type": "python:myapp.states.NextState",
+      "timeout": 30,
+      "retry_times": 3,
+      "switch": {
+        "ok": "Success",
+        "fail": "Error",
+        "retry": "StartState"
+      }
+    },
+    {
+      "name": "SubFlow",
+      "type": "playbook:subflow.json"
+    }
+  ]
+}
