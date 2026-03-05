@@ -2,7 +2,7 @@ from atexit import register
 import pytest
 import asyncio
 
-from am_core.context import Ctx
+from am_core.ctx.context import Ctx
 from am_core.orchestrator import Orchestrator, Rehearsal
 from am_core.playbook import Playbook
 from am_core.state_machine import StateMachine
@@ -18,8 +18,8 @@ class CountSM(StateMachine):
     #     parent.set("count", count + 1)
     #     return {"status": "ok"}
     async def _run(self, metadata):
-        count = self.ctx.get("count") or 0
-        self.ctx.set_nearest("count", count + 1)
+        count = self.wrapped_ctx.get("count") or 0
+        self.wrapped_ctx.set_nearest("count", count + 1)
         return {"status": "ok"}
 
 # --- 建立簡單 playbook：A → B → C ---

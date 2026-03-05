@@ -3,43 +3,37 @@
 from __future__ import annotations
 from typing import Any, Dict, Optional
 
-from .context import Ctx
+from am_core.ctx.ctx_wrapper import CtxDeltaCollector, WrappedCtx
+
+from .ctx.context import Ctx
 
 
 class StateMachine:
-    """
-    語意：
-    - StateMachine 是「原子」執行單元
-    - 有 ctx（lexical scope）
-    - 有 parent（通常是 Orchestrator 或 World）
-    - 對外介面：async run(metadata) -> dict
-    - 內部實作：_run(metadata) 由子類實作
-    - emit(event) 會往 parent 冒泡（若 parent 有 emit）
-    """
-
-    def __init__(self, ctx: Ctx, parent: Optional[Any] = None) -> None:
-        self.ctx = ctx
+    def __init__(self, wrapped_ctx: WrappedCtx, parent: Optional[Any] = None, name: Optional[str] = None):
+        self.wrapped_ctx = wrapped_ctx
         self.parent = parent
+        self.name = name
+        self._metadata_delta = {}
 
-    async def run(self, metadata: Dict[str, Any], mode: str = "normal") -> Dict[str, Any]:
-        """
-        對外統一協定：
-        - 接受 metadata
-        - 回傳 dict（至少應該有 status）
-        - 可在過程中呼叫 self.emit(event)
-        """
-        if mode == "simulate":
-            return await self._simulate(metadata)
+    async def run(self, metadata, mode="normal"):
+        wrapped_ctx = self.wrapped_ctx
 
-        output = await self._run(metadata)
-        return output
+        if mode == "normal":
+            output = await self._run(metadata)
+        elif mode == "preview":
+            output = await self._preview(metadata)
+        elif mode == "interactive_simulate":
+            output = await self._interactive_simulate(metadata)
+        else:
+            raise ValueError(f"Unknown mode: {mode}")
 
-    async def _run(self, metadata: Dict[str, Any]) -> Dict[str, Any]:
-        """
-        由子類實作的實際邏輯。
-        預設丟錯，避免忘記覆寫。
-        """
-        raise NotImplementedError("StateMachine._run() must be implemented by subclasses")
+        return {
+            "status": output.get("status", "ok"),
+            "is_SM": True,
+            "output": output,
+            "ctx_delta": list(wrapped_ctx._delta.ops),  # 轉成一般 list，方便序列化
+            "metadata_delta": dict(self._metadata_delta),
+        }
 
     def emit(self, event: Dict[str, Any]) -> None:
         """
@@ -48,20 +42,27 @@ class StateMachine:
         """
         if self.parent and hasattr(self.parent, "emit"):
             self.parent.emit(event)
-            
-    async def _simulate(self, metadata: Dict[str, Any]) -> Dict[str, Any]:
+
+    # --- 三種策略：子類別可以覆寫這三個 ---
+
+    async def _run(self, metadata: Dict[str, Any]) -> Dict[str, Any]:
         """
-        simulate 模式：不執行 _run()
-        回傳預設或使用者提供的 output
+        真實執行：有 side effect、有真實 ctx_delta / metadata_delta
         """
-        rehearsal = self.ctx.get("rehearsal")
-        state_name = self.ctx.get("current_state")
+        raise NotImplementedError
 
-        override = rehearsal.decision_override.get(state_name, {})
+    async def _preview(self, metadata: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        預演：無 side effect，但要產生「模擬的」 output / ctx_delta / metadata_delta
+        預設行為：直接呼叫 _run（子類別可以覆寫成純計算版）
+        """
+        return await self._run(metadata)
 
-        # 預設 output
-        output = override.get("output", {"status": "ok"})
-
-        return output
-    
-    
+    async def _interactive_simulate(self, metadata: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        互動模擬：無 side effect，但會停下來讓使用者調整 ctx_delta / metadata_delta
+        預設行為：先用 _preview 拿預設值，再給上層（UI）決定怎麼問人
+        """
+        preview_output = await self._preview(metadata)
+        # 這裡先保留 hook，之後我們再決定怎麼跟 UI 對話
+        return preview_output

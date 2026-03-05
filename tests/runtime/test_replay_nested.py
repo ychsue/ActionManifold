@@ -1,7 +1,7 @@
 import pytest
 import asyncio
 
-from am_core.context import Ctx
+from am_core.ctx.context import Ctx
 from am_core.orchestrator import Orchestrator, Rehearsal
 from am_core.playbook import Playbook
 from am_core.state_machine import StateMachine
@@ -10,9 +10,9 @@ from am_core.state_machine import StateMachine
 # --- 測試用 SM：每次執行會把 ctx["count"] += 1 ---
 class CountSM(StateMachine):
     async def _run(self, metadata):
-        count = self.ctx.get("count") or 0
+        count = self.wrapped_ctx.get("count") or 0
         # 用 nearest，讓 count 寫在「最接近有 count 的 ctx」上
-        self.ctx.set_nearest("count", count + 1)
+        self.wrapped_ctx.set_nearest("count", count + 1)
         return {"status": "ok"}
 
 

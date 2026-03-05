@@ -336,9 +336,9 @@ test_linear_playbook_runs_in_order()
 #### 7. **如果你願意，我可以幫你：**
 
 - [ ] 寫出第一個 semantic test 的完整內容  
-- [ ] 幫你定義 playbook 的最小語意 schema  
-- [ ] 幫你寫 orchestrator.run 的骨架  
-- [ ] 幫你把 decision_block / run_watcher 的 interface 定義清楚  
+-  幫你定義 playbook 的最小語意 schema  
+-  幫你寫 orchestrator.run 的骨架  
+-  幫你把 decision_block / run_watcher 的 interface 定義清楚  
 - [ ] 幫你把 design_world 的語意抽成一份「語意規格書」
 
 你想先從哪一個開始？
@@ -10580,15 +10580,15 @@ A → B → C → D
 
 包含：
 
-- [x] ctx["rehearsal"] 的 schema  
-- [ ] run() 如何讀 rehearsal mode  
-- [ ] event_log 如何 emit loop-entry event  
-- [ ] resume() 如何跳過已完成的 state  
-- [ ] resume_from 的實作
-- [ ] stop_at 的實作
-- [ ] replay() 如何設定 event_pointer  
+-  ctx["rehearsal"] 的 schema  
+-  run() 如何讀 rehearsal mode  
+-  event_log 如何 emit loop-entry event  
+-  resume() 如何跳過已完成的 state  
+-  resume_from 的實作
+-  stop_at 的實作
+-  replay() 如何設定 event_pointer  
 - [ ] simulate_run() 如何 override decision  
-- [ ] nested orchestrator 如何自然 resume  
+-  nested orchestrator 如何自然 resume  
 - [ ] event_log 的 trace UI schema  
 
 你只要說：
@@ -11858,10 +11858,10 @@ async def run(self, metadata=None):
 
 我建議我們接下來寫：
 
-1. [ ]`test_resume_simple.py`  
-2. [ ]`test_resume_nested.py`  
-3. [ ]`test_simulate.py`  
-4. [ ]`test_stop_at.py`  
+1. `test_resume_simple.py`  
+2. `test_resume_nested.py`  
+3. `test_simulate.py`  
+4. `test_stop_at.py`  
 5. [ ]`test_replay_levels.py`  
 
 如果你願意，我可以直接幫你寫 pytest 的骨架。

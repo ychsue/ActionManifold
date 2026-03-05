@@ -1,6 +1,6 @@
 import pytest
 
-from am_core.context import Ctx
+from am_core.ctx.context import Ctx
 from am_core.playbook import Playbook
 from am_core.orchestrator import Orchestrator
 from am_core.state_machine import StateMachine

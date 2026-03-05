@@ -109,7 +109,7 @@ class Ctx:
     # -------------------------
     # apply_writes（取代 apply_delta）
     # -------------------------
-    def apply_writes(self, writes: List[Dict[str, Any]]) -> None:
+    def apply_writes(self, writes: List[Dict[str, Any]], into_writes: bool = False) -> None:
         """
         根據 write log patch 整棵 ctx tree。
         - local：寫當前層
@@ -117,6 +117,8 @@ class Ctx:
         - root：寫 root
         """
         for w in writes:
+            if into_writes:
+                self._writes.append(w)
             mode = w["mode"]
             key = w["key"]
             value = w["to"]

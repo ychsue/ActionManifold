@@ -6,8 +6,9 @@ from typing import Any, Dict, List, Literal, Optional
 import asyncio
 import time
 
+from am_core.ctx.ctx_wrapper import CtxDeltaCollector, WrappedCtx
 from am_core.state_machine import StateMachine
-from .context import Ctx
+from .ctx.context import Ctx
 from .run_watcher import run_watcher
 from .decision_block import decision_block
 from .playbook import Playbook
@@ -73,11 +74,13 @@ class Orchestrator:
         parent: Optional[Any] = None,
         *,
         metadata: Optional[Dict[str, Any]] = None,
+        name: Optional[str] = None,
     ) -> None:
         self.playbook = playbook
         self.ctx = ctx
         self.parent = parent
         self.metadata: Dict[str, Any] = metadata or {}
+        self.name = name
         self.events: List[Dict[str, Any]] = []
 
         # rehearsal 初始化
@@ -120,10 +123,11 @@ class Orchestrator:
         if issubclass(cls, Orchestrator):
             if subflow is None:
                 raise ValueError(f"State {state_name} uses Orchestrator but no subflow provided")
-            return cls(playbook=subflow, ctx=child_ctx, parent=self)
+            return cls(playbook=subflow, ctx=child_ctx, parent=self, name=state_name)
 
         if issubclass(cls, StateMachine):
-            return cls(ctx=child_ctx, parent=self)
+            wrapped_ctx = WrappedCtx(child_ctx, CtxDeltaCollector())
+            return cls(wrapped_ctx=wrapped_ctx, parent=self, name=state_name)
 
         raise TypeError(f"Unsupported constructor class for state {state_name}: {cls}")
 
@@ -345,7 +349,15 @@ class Orchestrator:
             return next_state
 
         # running
-        sm_output = enriched.get("output", {})
+        enriched_event = enriched.get("event", {}) or {}
+        sm_output = enriched_event.get("output", {}) or {}
+        # 如果是SM，要套用 ctx_delta 與 metadata_delta
+        if sm_output.get("is_SM"):
+            if sm_output.get("ctx_delta"):
+                child_ctx.apply_writes(sm_output["ctx_delta"], into_writes=True)
+
+            if sm_output.get("metadata_delta"):
+                self.metadata.update(sm_output["metadata_delta"])
         exit_event = {
             "id": event_id,
             "kind": "after_decision",

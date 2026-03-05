@@ -2,7 +2,7 @@ from pathlib import Path
 
 from sympy import Le
 from am_core.orchestrator import Orchestrator
-from am_core.context import WorldCtx, CtxBus
+from am_core.ctx.context import WorldCtx, CtxBus
 from am_core.state_machine import StateMachine, WorldRunnerFactory
 from am_core.leak_monitor import LeakMonitor
 import asyncio
@@ -10,20 +10,20 @@ import asyncio
 class InputNameMachine(StateMachine):
     async def run(self):
         self.emit("progress", {"msg": "開始輸入名稱"})
-        self.ctx.set("name_entered", True)
+        self.wrapped_ctx.set("name_entered", True)
         self.emit("progress", {"msg": "名稱輸入完成"})
 class InputPasswordMachine(StateMachine):
     async def run(self):
         self.emit("progress", {"msg": "開始輸入密碼"})
-        self.ctx.set("password", "1234")
+        self.wrapped_ctx.set("password", "1234")
         self.emit("progress", {"msg": "密碼輸入完成"})
         # 密碼檢查
-        pwd = self.ctx.get("password")
+        pwd = self.wrapped_ctx.get("password")
         if pwd == "1234":
-            self.ctx.set("password_ok", True)
+            self.wrapped_ctx.set("password_ok", True)
             self.emit("progress", {"msg": "密碼正確"})
         else:
-            self.ctx.set("password_bad", True)
+            self.wrapped_ctx.set("password_bad", True)
             self.emit("progress", {"msg": "密碼錯誤"})
 
 login_playbook = {

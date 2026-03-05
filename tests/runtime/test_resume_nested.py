@@ -1,7 +1,7 @@
 import pytest
 import asyncio
 
-from am_core.context import Ctx
+from am_core.ctx.context import Ctx
 from am_core.orchestrator import Orchestrator, Rehearsal
 from am_core.playbook import Playbook
 from am_core.state_machine import StateMachine
@@ -10,13 +10,13 @@ from am_core.state_machine import StateMachine
 # --- 測試用 SM：每次執行會把 ctx["count"] += 1 ---
 def CountSMFactory(name):
     class _CountSM(StateMachine):
-        def __init__(self, ctx, parent):
-            super().__init__(ctx, parent)
+        def __init__(self, wrapped_ctx, parent, name):
+            super().__init__(wrapped_ctx, parent, name)
             self.name = name
 
         async def _run(self, metadata):
-            count = self.ctx.get("count") or 0
-            self.ctx.set_nearest("count", count + 1)
+            count = self.wrapped_ctx.get("count") or 0
+            self.wrapped_ctx.set_nearest("count", count + 1)
 
             # emit event for replay/resume test
             self.emit({

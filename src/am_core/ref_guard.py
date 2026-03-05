@@ -1,4 +1,4 @@
-from .context import BaseCtx
+from .ctx.context import Ctx
 from typing import Any, Optional
 
 class RefGuard:
@@ -20,7 +20,7 @@ class RefGuard:
             ...
     ```
     """
-    def __init__(self, ctx: BaseCtx, key: str, value: Any):
+    def __init__(self, ctx: Ctx, key: str, value: Any):
         self.ctx = ctx
         self.key = key
         self.value = value

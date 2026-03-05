@@ -5,7 +5,7 @@ import asyncio
 
 from streamlit import stop
 
-from am_core.context import Ctx
+from am_core.ctx.context import Ctx
 from am_core.orchestrator import Orchestrator, Rehearsal
 from am_core.playbook import Playbook
 from am_core.state_machine import StateMachine
@@ -14,8 +14,8 @@ from am_core.state_machine import StateMachine
 def CountSMFactory(name):
     class _CountSM(StateMachine):
         async def _run(self, metadata):
-            count = self.ctx.get("count") or 0
-            self.ctx.set_nearest("count", count + 1)
+            count = self.wrapped_ctx.get("count") or 0
+            self.wrapped_ctx.set_nearest("count", count + 1)
             self.emit({"kind": "sm_executed", "state": name})
             return {"status": "ok"}
     return _CountSM

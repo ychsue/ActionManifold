@@ -1,3 +1,16 @@
+# [2026-03-04] 修改Copilot's Answer，讓 ctx_wrapper.py 能運作
+
+1. [ctx_wrapper.py](src\am_core\ctx\ctx_wrapper.py) 的
+``` py
+        # 多加先確定 key 在 delta 裡沒有被 set 過，才從 real ctx 讀取
+        for op, k, v in reversed(self._delta.ops):
+            if k == key:
+                return v
+```
+2. `metadata_delta` 好像沒有 metadata wrapper
+3. 我想，不需要 `ctx_apply`
+4. 通過65個測試
+
 # [2026-02-24] 將 stop_at 也加進去
 
 # [2026-02-23] Copilot 準備重構 orchestrator.py，有點危險，先 commit

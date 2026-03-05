@@ -2,7 +2,7 @@
 
 import pytest
 
-from am_core.context import Ctx
+from am_core.ctx.context import Ctx
 from am_core.playbook import Playbook
 from am_core.orchestrator import Orchestrator
 from am_core.state_machine import StateMachine
@@ -14,8 +14,8 @@ from am_core.state_machine import StateMachine
 class SubStart(StateMachine):
     async def _run(self, metadata):
         self.emit({"type": "sm",
-                   "ctx_state": self.ctx.get("current_state"),
-                   "parent_state": self.ctx.get("parent_state"),
+                   "ctx_state": self.wrapped_ctx.get("current_state"),
+                   "parent_state": self.wrapped_ctx.get("parent_state"),
                    "state": "SubStart"})
         return {"status": "ok"}
 
@@ -23,8 +23,8 @@ class SubStart(StateMachine):
 class SubEnd(StateMachine):
     async def _run(self, metadata):
         self.emit({"type": "sm",
-                   "ctx_state": self.ctx.get("current_state"),
-                   "parent_state": self.ctx.get("parent_state"),
+                   "ctx_state": self.wrapped_ctx.get("current_state"),
+                   "parent_state": self.wrapped_ctx.get("parent_state"),
                    "state": "SubEnd"})
         return {"status": "ok"}
 
