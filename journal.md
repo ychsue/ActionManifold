@@ -1,3 +1,5 @@
+# [2026-03-07] SM._run 改吃 wrapped_metadata
+
 # [2026-03-04] 修改Copilot's Answer，讓 ctx_wrapper.py 能運作
 
 1. [ctx_wrapper.py](src\am_core\ctx\ctx_wrapper.py) 的

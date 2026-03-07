@@ -9,7 +9,7 @@ from am_core.state_machine import StateMachine
 
 # --- 測試用 SM：每次執行會把 ctx["count"] += 1 ---
 class CountSM(StateMachine):
-    async def _run(self, metadata):
+    async def _run(self, wrapped_metadata):
         count = self.wrapped_ctx.get("count") or 0
         # 用 nearest，讓 count 寫在「最接近有 count 的 ctx」上
         self.wrapped_ctx.set_nearest("count", count + 1)

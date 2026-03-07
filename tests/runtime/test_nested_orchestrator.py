@@ -12,7 +12,7 @@ from am_core.state_machine import StateMachine
 # 子流程的 StateMachine
 # ----------------------------------------
 class SubStart(StateMachine):
-    async def _run(self, metadata):
+    async def _run(self, wrapped_metadata):
         self.emit({"type": "sm",
                    "ctx_state": self.wrapped_ctx.get("current_state"),
                    "parent_state": self.wrapped_ctx.get("parent_state"),
@@ -21,7 +21,7 @@ class SubStart(StateMachine):
 
 
 class SubEnd(StateMachine):
-    async def _run(self, metadata):
+    async def _run(self, wrapped_metadata):
         self.emit({"type": "sm",
                    "ctx_state": self.wrapped_ctx.get("current_state"),
                    "parent_state": self.wrapped_ctx.get("parent_state"),
@@ -33,13 +33,13 @@ class SubEnd(StateMachine):
 # 主流程的 StateMachine
 # ----------------------------------------
 class MainStart(StateMachine):
-    async def _run(self, metadata):
+    async def _run(self, wrapped_metadata):
         self.emit({"type": "sm", "state": "MainStart"})
         return {"status": "ok"}
 
 
 class MainEnd(StateMachine):
-    async def _run(self, metadata):
+    async def _run(self, wrapped_metadata):
         self.emit({"type": "sm", "state": "MainEnd"})
         return {"status": "ok"}
 

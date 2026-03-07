@@ -14,7 +14,7 @@ def CountSMFactory(name):
             super().__init__(wrapped_ctx, parent, name)
             self.name = name
 
-        async def _run(self, metadata):
+        async def _run(self, wrapped_metadata):
             count = self.wrapped_ctx.get("count") or 0
             self.wrapped_ctx.set_nearest("count", count + 1)
 

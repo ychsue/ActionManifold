@@ -3664,8 +3664,12 @@ def test_sm2_can_read_sm1_update():
 
 如果你願意，我可以下一步幫你：
 
-- [ ] 加上 metadata wrapper  
+- [x] 加上 metadata wrapper  
 - [ ] 把 preview / interactive_simulate 正式接進 orchestrator.run  
 - [ ] 設計 interactive simulate 的「await_input」事件格式（方案 A）  
 
 你想先做哪一個？
+
+- [ ] preview / interactive_simulate 的 metadata_delta 語意也補齊
+- [ ] metadata_delta 的 replay/resume 測試補齊
+- [不要好了] 或者幫你把 metadata wrapper 整合到 orchestrator 的 constructor 裡（更乾淨）

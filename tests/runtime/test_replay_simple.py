@@ -17,7 +17,7 @@ class CountSM(StateMachine):
     #     count = parent.get("count") or 0
     #     parent.set("count", count + 1)
     #     return {"status": "ok"}
-    async def _run(self, metadata):
+    async def _run(self, wrapped_metadata):
         count = self.wrapped_ctx.get("count") or 0
         self.wrapped_ctx.set_nearest("count", count + 1)
         return {"status": "ok"}

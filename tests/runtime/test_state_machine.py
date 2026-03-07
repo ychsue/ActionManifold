@@ -5,6 +5,7 @@ import pytest
 
 from am_core.ctx.context import Ctx
 from am_core.ctx.ctx_wrapper import CtxDeltaCollector, WrappedCtx
+from am_core.ctx.metadata_wrapper import WrappedMetadata
 from am_core.state_machine import StateMachine
 
 
@@ -17,9 +18,9 @@ class DummyParent:
 
 
 class EchoState(StateMachine):
-    async def _run(self, metadata):
-        self.emit({"type": "echo", "meta": metadata})
-        return {"status": "ok", "echo": metadata}
+    async def _run(self, wrapped_metadata: WrappedMetadata):
+        self.emit({"type": "echo", "meta": wrapped_metadata._real})
+        return {"status": "ok", "echo": wrapped_metadata._real}
 
 @pytest.mark.asyncio
 async def test_state_machine_emit_and_run():

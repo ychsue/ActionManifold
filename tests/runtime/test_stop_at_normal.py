@@ -11,7 +11,7 @@ from am_core.state_machine import StateMachine
 
 def CountSMFactory(name):
     class _CountSM(StateMachine):
-        async def _run(self, metadata):
+        async def _run(self, wrapped_metadata):
             count = self.wrapped_ctx.get("count") or 0
             self.wrapped_ctx.set_nearest("count", count + 1)
             self.emit({"kind": "sm_executed", "state": name})

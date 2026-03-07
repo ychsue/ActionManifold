@@ -7,20 +7,24 @@ from am_core.state_machine import StateMachine
 
 
 class A(StateMachine):
-    async def _run(self, metadata):
-        metadata["order"] = ["A"]
+    async def _run(self, wrapped_metadata):
+        wrapped_metadata.set("order", ["A"])
         return {"status": "ok"}
 
 
 class B(StateMachine):
-    async def _run(self, metadata):
-        metadata["order"].append("B")
+    async def _run(self, wrapped_metadata):
+        orders = wrapped_metadata.get("order") or []
+        orders.append("B")
+        wrapped_metadata.set("order", orders)
         return {"status": "ok"}
 
 
 class C(StateMachine):
-    async def _run(self, metadata):
-        metadata["order"].append("C")
+    async def _run(self, wrapped_metadata):
+        orders = wrapped_metadata.get("order") or []
+        orders.append("C")
+        wrapped_metadata.set("order", orders)
         return {"status": "ok"}
 
 

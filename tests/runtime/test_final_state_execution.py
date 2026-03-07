@@ -7,8 +7,8 @@ from am_core.state_machine import StateMachine
 
 
 class FinalState(StateMachine):
-    async def _run(self, metadata):
-        metadata["final_executed"] = True
+    async def _run(self, wrapped_metadata):
+        wrapped_metadata.set("final_executed", True)
         return {"status": "ok"}
 
 

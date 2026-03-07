@@ -9,17 +9,18 @@ from am_core.state_machine import StateMachine
 
 
 class StartState(StateMachine):
-    async def _run(self, metadata):
+    async def _run(self, wrapped_metadata):
         # 永遠 ok，線性到 NextState
         self.emit({"type": "state", "name": "StartState"})
         return {"status": "ok"}
 
 
 class NextState(StateMachine):
-    async def _run(self, metadata):
+    async def _run(self, wrapped_metadata):
         # 第一次 fail → retry
         # 第二次 ok → Success
-        retries = metadata.get("retries", {}).get("NextState", 0)
+        retries_all = wrapped_metadata.get("retries", {})
+        retries = retries_all.get("NextState", 0) if type(retries_all) is dict else 0
         self.emit({"type": "state", "name": "NextState", "retries": retries})
         if retries == 0:
             return {"status": "fail"}

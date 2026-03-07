@@ -226,7 +226,6 @@ class Orchestrator:
             # ------------------------------------------------------------
             next_state = self.after_decision(
                 event_id,
-                metadata,
                 current_state,
                 parent_state,
                 enriched,
@@ -322,7 +321,6 @@ class Orchestrator:
     def after_decision(
         self,
         event_id,
-        metadata,
         current_state,
         parent_state,
         enriched,
@@ -366,7 +364,7 @@ class Orchestrator:
             "parent_state": parent_state,
             "status": sm_output.get("status"),
             "sm_output": sm_output,
-            "metadata": metadata.copy() if metadata else None,
+            "metadata": self.metadata.copy() if self.metadata else None,
             "ctx_delta": child_ctx.dump_writes() if hasattr(child_ctx, "dump_writes") else None,
             "transition": next_state,
         }

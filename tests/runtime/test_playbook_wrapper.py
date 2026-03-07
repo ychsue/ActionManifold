@@ -12,17 +12,17 @@ from am_core.orchestrator import Orchestrator
 # 測試用 SM
 # ---------------------------------------------------------
 class A(StateMachine):
-    async def _run(self, metadata):
+    async def _run(self, wrapped_metadata):
         return {"status": "ok"}
 
 
 class B(StateMachine):
-    async def _run(self, metadata):
+    async def _run(self, wrapped_metadata):
         return {"status": "ok"}
 
 
 class C(StateMachine):
-    async def _run(self, metadata):
+    async def _run(self, wrapped_metadata):
         return {"status": "ok"}
 
 
