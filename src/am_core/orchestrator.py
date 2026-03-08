@@ -142,7 +142,7 @@ class Orchestrator:
     # ------------------------------------------------------------
     # 主 runtime loop
     # ------------------------------------------------------------
-    async def run(self, metadata: Optional[Dict[str, Any]] = None, mode: str = "normal") -> Dict[str, Any]:
+    async def run(self, metadata: Optional[Dict[str, Any]] = None, sm_mode: str = "normal") -> Dict[str, Any]:
         rehearsal: Rehearsal = self.ctx.get("rehearsal")
 
         if metadata is None:
@@ -193,7 +193,7 @@ class Orchestrator:
             # ------------------------------------------------------------
             if not pass_execution:
                 sm_output, timeout_flag, start_time, end_time = await self.exec_child(
-                    state_def, child, loop, mode=mode
+                    state_def, child, loop, sm_mode=sm_mode
                 )
 
                 # TODO: 不確定未來是否stop要這樣處理，先這樣寫，之後再優化
@@ -295,7 +295,7 @@ class Orchestrator:
     # ------------------------------------------------------------
     # exec_child
     # ------------------------------------------------------------
-    async def exec_child(self, state_def, child, loop, mode):
+    async def exec_child(self, state_def, child, loop, sm_mode):
         timeout_setting = state_def.get("timeout")
         timeout_flag = False
         start_time = loop.time()
@@ -303,11 +303,11 @@ class Orchestrator:
         try:
             if timeout_setting is not None:
                 sm_output = await asyncio.wait_for(
-                    child.run(self.metadata, mode=mode),
+                    child.run(self.metadata, sm_mode=sm_mode),
                     timeout=float(timeout_setting),
                 )
             else:
-                sm_output = await child.run(self.metadata, mode=mode)
+                sm_output = await child.run(self.metadata, sm_mode=sm_mode)
         except asyncio.TimeoutError:
             sm_output = {"status": "timeout"}
             timeout_flag = True

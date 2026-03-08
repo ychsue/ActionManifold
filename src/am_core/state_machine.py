@@ -17,18 +17,18 @@ class StateMachine:
         self._metadata_delta = MetadataDeltaCollector()
         self.wrapped_metadata = None
 
-    async def run(self, metadata, mode="normal"):
+    async def run(self, metadata, sm_mode="normal"):
         wrapped_ctx = self.wrapped_ctx
         self.wrapped_metadata = WrappedMetadata(metadata, self._metadata_delta)
 
-        if mode == "normal":
+        if sm_mode == "normal":
             output = await self._run(self.wrapped_metadata)
-        elif mode == "preview":
+        elif sm_mode == "preview":
             output = await self._preview(self.wrapped_metadata)
-        elif mode == "interactive_simulate":
+        elif sm_mode == "interactive_simulate":
             output = await self._interactive_simulate(self.wrapped_metadata)
         else:
-            raise ValueError(f"Unknown mode: {mode}")
+            raise ValueError(f"Unknown mode: {sm_mode}")
 
         return {
             "status": output.get("status", "ok"),

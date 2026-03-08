@@ -1,4 +1,5 @@
 # [2026-03-07] SM._run 改吃 wrapped_metadata
+順便也把 `run(mode=...)` 改成 `run(sm_mode=...)` 因為他是給 SM 的，與 `rehearsal.mode` 是流程級的不一樣。
 
 # [2026-03-04] 修改Copilot's Answer，讓 ctx_wrapper.py 能運作
 
