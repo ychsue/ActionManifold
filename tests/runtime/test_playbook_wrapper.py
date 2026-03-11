@@ -34,14 +34,14 @@ def test_playbook_wrapper_states_ctor():
         "initial": "A",
         "final": ["A"],
         "states": [
-            {"name": "A", "class": "tests.runtime.test_playbook_wrapper.A"},
+            {"name": "A", "class_": "tests.runtime.test_playbook_wrapper.A"},
         ],
         "registry": {}
     })
 
     ctor = pb.get_state_constructor("A")
 
-    assert ctor["class"].__name__ == "A"
+    assert ctor["class_"].__name__ == "A"
     assert ctor["subflow"] is None
     assert ctor["workdir"] is None
 
@@ -58,14 +58,14 @@ def test_playbook_wrapper_registry_ctor():
         ],
         "registry": {
             "A": {
-                "class": B
+                "class_": B
             }
         }
     })
 
     ctor = pb.get_state_constructor("A")
 
-    assert ctor["class"].__name__ == "B"
+    assert ctor["class_"].__name__ == "B"
     assert ctor["subflow"] is None
     assert ctor["workdir"] is None
 
@@ -78,11 +78,11 @@ def test_playbook_wrapper_states_override_registry():
         "initial": "A",
         "final": ["A"],
         "states": [
-            {"name": "A", "class": "tests.runtime.test_playbook_wrapper.C"},
+            {"name": "A", "class_": "tests.runtime.test_playbook_wrapper.C"},
         ],
         "registry": {
             "A": {
-                "class": B
+                "class_": B
             }
         }
     })
@@ -90,7 +90,7 @@ def test_playbook_wrapper_states_override_registry():
     ctor = pb.get_state_constructor("A")
 
     # states > registry
-    assert ctor["class"].__name__ == "C"
+    assert ctor["class_"].__name__ == "C"
 
 
 # ---------------------------------------------------------
@@ -101,7 +101,7 @@ def test_playbook_wrapper_subflow():
         "initial": "B",
         "final": ["B"],
         "states": [
-            {"name": "B", "class": "tests.runtime.test_playbook_wrapper.B"}
+            {"name": "B", "class_": "tests.runtime.test_playbook_wrapper.B"}
         ],
         "registry": {}
     }
@@ -112,7 +112,7 @@ def test_playbook_wrapper_subflow():
         "states": [
             {
                 "name": "A",
-                # "class": "am_core.orchestrator.Orchestrator",
+                # "class_": "am_core.orchestrator.Orchestrator",
                 "subflow": sub_pb_dict
             }
         ],
@@ -121,7 +121,7 @@ def test_playbook_wrapper_subflow():
 
     ctor = pb.get_state_constructor("A")
 
-    assert issubclass(ctor["class"], Orchestrator)
+    assert issubclass(ctor["class_"], Orchestrator)
     assert ctor["subflow"].initial == "B"
     assert ctor["subflow"].states["B"]["name"] == "B"
 
@@ -142,4 +142,4 @@ def test_playbook_wrapper_builtin():
     ctor = pb.get_state_constructor("Success")
 
     # builtin SuccessStateMachine
-    assert ctor["class"].__name__ == "SuccessStateMachine"
+    assert ctor["class_"].__name__ == "SuccessStateMachine"

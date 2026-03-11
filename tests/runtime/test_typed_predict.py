@@ -8,7 +8,7 @@ from examples.example_sm_with_type import ExampleSM
 
 @pytest.mark.asyncio
 async def test_predict_and_run_apply():
-    pb = Playbook({"initial": "A", "states": [{"name": "A", "class": "examples.example_sm_with_type.ExampleSM"}]})
+    pb = Playbook({"initial": "A", "states": [{"name": "A", "class_": "examples.example_sm_with_type.ExampleSM"}]})
     ctx = Ctx()
     orch = Orchestrator(pb, ctx)
 

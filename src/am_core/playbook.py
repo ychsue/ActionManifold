@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 from inspect import isclass
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Required
 from pathlib import Path
 import importlib
 import json
@@ -31,7 +31,7 @@ INTERNAL_STATES = {
 #             "init": Optional[dict],          # per-state initialization, passed to ctx.child() when ini_child
 #             "use_parent_metadata": Optional[bool], # whether to pass down parent metadata to this state. default is True for SM but False for other states. if False, the state starts with empty metadata.
 #             # constructor info
-#             "class": Optional[str],        # Python class path
+#             "class_": Optional[str],        # Python class path
 #             "subflow": Optional[str|dict], # nested Playbook
 #             "builtin": Optional[str],      # "Success", "Error", ...
 #             "workdir": Optional[str],      # reserved for WORLD
@@ -39,7 +39,7 @@ INTERNAL_STATES = {
 #     ],
 #     "registry": {
 #         stateName: {
-#             "class": Optional[type],       # Python class
+#             "class_": Optional[type],       # Python class
 #             "subflow": Optional[Playbook], # nested Playbook
 #             "workdir": Optional[str],
 #         }
@@ -48,7 +48,7 @@ INTERNAL_STATES = {
 from typing import TypedDict, NotRequired, Dict, List, Any
 
 class StateDef(TypedDict, total=False):
-    name: str
+    name: Required[str]
     to: str
     switch: Dict[str, str]
     timeout: float
@@ -56,7 +56,7 @@ class StateDef(TypedDict, total=False):
     init: Dict[str, Any] # per-state initialization, passed to ctx.child() when ini_child
     use_parent_metadata: bool
     class_: str  # 注意：Python 保留字 class，建議改名 class_
-    subflow: Any
+    subflow: Playbook|dict|str
     builtin: str
     workdir: str
 
@@ -78,7 +78,7 @@ class Playbook:
     只回傳 constructor info，由 runtime 決定如何 instantiate。
     """
 
-    def __init__(self, data: Dict[str, Any], base_path: Optional[str] = None):
+    def __init__(self, data: PlaybookDict|dict, base_path: Optional[str] = None):
         self.data = data
         self.base_path = base_path
 
@@ -101,8 +101,10 @@ class Playbook:
     def is_final(self, state: str) -> bool:
         return state in self.final
 
-    def get_state_def(self, state: str) -> Dict[str, Any]:
-        return self.states.get(state, {})
+    def get_state_def(self, state: str) -> StateDef|None:
+        if state in INTERNAL_STATES:
+            return {"name": state, "builtin": state}  # 內建狀態的 state_def 是隱式的，只有 builtin 屬性
+        return self.states.get(state, None)
 
     # -------------------------
     # 解析 state constructor info
@@ -112,7 +114,7 @@ class Playbook:
         根據 schema（states + registry）組出 ctor_info：
 
         {
-            "class": PythonClass,
+            "class_": PythonClass,
             "subflow": Optional[Playbook],
             "workdir": Optional[str],
         }
@@ -126,7 +128,7 @@ class Playbook:
         state_def = self.get_state_def(state)
 
         ctor: dict = {
-            "class": None,
+            "class_": None,
             "subflow": None,
             "workdir": None,
         }
@@ -137,9 +139,9 @@ class Playbook:
         if state in self.registry:
             entry = self.registry[state]
             if isclass(entry) and issubclass(entry, StateMachine):
-                ctor["class"] = entry
+                ctor["class_"] = entry
             elif isinstance(entry, dict):
-                ctor["class"] = entry.get("class") or ctor["class"]
+                ctor["class_"] = entry.get("class_") or ctor["class_"]
                 ctor["subflow"] = entry.get("subflow") or ctor["subflow"]
                 ctor["workdir"] = entry.get("workdir") or ctor["workdir"]
 
@@ -147,21 +149,23 @@ class Playbook:
         # 2. 再吃 states（本地宣告，覆寫 registry）
         # -------------------------
 
+        if state_def is None:
+            return ctor  # 沒有 states 定義，直接回 registry 的結果（可能是空的）
         # 2-1 builtin：內建 SM（Success / Error / Fail）
         builtin_name = state_def.get("builtin")
         if builtin_name:
             if builtin_name not in INTERNAL_STATES:
                 raise ValueError(f"Unknown builtin state: {builtin_name}")
-            ctor["class"] = INTERNAL_STATES[builtin_name]
+            ctor["class_"] = INTERNAL_STATES[builtin_name]
 
         # 2-2 class：Python class path（"a.b.C"）
-        class_path = state_def.get("class")
+        class_path = state_def.get("class_")
         if class_path:
             module_name, _, cls_name = class_path.rpartition(".")
             if not module_name or not cls_name:
                 raise ValueError(f"Invalid class path for state {state}: {class_path}")
             module = importlib.import_module(module_name)
-            ctor["class"] = getattr(module, cls_name)
+            ctor["class_"] = getattr(module, cls_name)
 
         # 2-3 subflow：巢狀 Playbook（dict 或 "playbook:xxx.json"）
         subflow = state_def.get("subflow")
@@ -187,14 +191,14 @@ class Playbook:
         # -------------------------
         # 3. 若什麼都沒有，試試 INTERNAL_STATES（state 名稱本身）
         # -------------------------
-        if ctor["class"] is None and state in INTERNAL_STATES:
-            ctor["class"] = INTERNAL_STATES[state]
+        if ctor["class_"] is None and state in INTERNAL_STATES:
+            ctor["class_"] = INTERNAL_STATES[state]
             
-        if ctor["class"] is None and ctor["subflow"] is not None:
+        if ctor["class_"] is None and ctor["subflow"] is not None:
             from .orchestrator import Orchestrator  # 避免循環 import
-            ctor["class"] = Orchestrator  # 若有 subflow 卻沒指定 class，預設用 Orchestrator
+            ctor["class_"] = Orchestrator  # 若有 subflow 卻沒指定 class，預設用 Orchestrator
 
-        if ctor["class"] is None:
+        if ctor["class_"] is None:
             raise ValueError(f"No constructor found for state {state}")
 
         return ctor
@@ -205,7 +209,7 @@ class Playbook:
 
         if type_str.startswith("python:"):
             cls = self._load_python_class(type_str[len("python:"):])
-            return {"kind": "python", "class": cls}
+            return {"kind": "python", "class_": cls}
 
         if type_str.startswith("playbook:"):
             pb = self._load_sub_playbook(type_str[len("playbook:"):])
@@ -260,6 +264,6 @@ class Playbook:
     def is_state_machine(self, state: str) -> bool:
         try:
             ctor_info = self.get_state_constructor(state)
-            return issubclass(ctor_info["class"], StateMachine)
+            return issubclass(ctor_info["class_"], StateMachine)
         except Exception:
             return False

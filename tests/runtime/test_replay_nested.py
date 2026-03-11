@@ -47,7 +47,7 @@ def root_playbook():
                 "A": CountSM,
                 # 這裡用 Orchestrator 當作子流程
                 "Sub": {
-                    "class": Orchestrator,
+                    "class_": Orchestrator,
                     "subflow": subflow_playbook(),                    
                     },
                 "Z": CountSM,

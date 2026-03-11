@@ -37,7 +37,7 @@ async def test_schema_sm_preview_and_normal():
         data={
             "initial": "A",
             "states": [
-                {"name": "A", "class": "tests.runtime.test_schema_sm.SchemaSM"},
+                {"name": "A", "class_": "tests.runtime.test_schema_sm.SchemaSM"},
             ],
         }
     )

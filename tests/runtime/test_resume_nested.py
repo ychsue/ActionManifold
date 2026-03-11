@@ -59,7 +59,7 @@ def root_playbook():
             "registry": {
                 "A": CountSMFactory("A"),
                 "Sub": {
-                    "class": Orchestrator,
+                    "class_": Orchestrator,
                     "subflow": subflow_playbook(),
                 },
                 "Z": CountSMFactory("Z"),

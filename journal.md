@@ -1,3 +1,5 @@
+# [2026-03-11] 將 Playbook 的 "class" 改為 "class_"，順便給他套上 `PlaybookDict` 的型別與優化
+
 # [2026-03-11] 處理 ctx 與 metadata 的邏輯與初始化的問題
 
 #### 🌱 ctx = lexical scope（配置、參數、初始化、局部狀態）

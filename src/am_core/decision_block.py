@@ -13,7 +13,8 @@ def decision_block(playbook: Playbook, current_state: str, enriched_output: Dict
     """
     state_def = playbook.get_state_def(current_state)
     sm_status = enriched_output["status"]
-
+    if state_def is None:
+        raise ValueError(f"State {current_state} not found in playbook states")
     # 1. switch 語意
     if "switch" in state_def:
         sw = state_def["switch"]

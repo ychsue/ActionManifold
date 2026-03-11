@@ -115,7 +115,7 @@ class Orchestrator:
     # child instantiate
     # ------------------------------------------------------------
     def _instantiate_child(self, state_name: str, child_ctx: Ctx, ctor: dict):
-        cls = ctor["class"]
+        cls = ctor["class_"]
         subflow = ctor.get("subflow")
 
         from .orchestrator import Orchestrator
@@ -289,6 +289,8 @@ class Orchestrator:
         state_def = self.playbook.get_state_def(current_state)
         ctor = self.playbook.get_state_constructor(current_state)
         
+        if state_def is None or ctor is None:
+            raise ValueError(f"State {current_state} not found in playbook states or registry")
         # 取得 per-state initialization
         child_ctx = self.ctx.child(
             current_state=current_state, 

@@ -24,8 +24,8 @@ class SetMeta2(StateMachine):
 async def test_metadata_delta_resume():
     pb = Playbook({
         "registry": {
-            "A": {"class": SetMeta1, "next": "B"},
-            "B": {"class": SetMeta2},
+            "A": {"class_": SetMeta1, "next": "B"},
+            "B": {"class_": SetMeta2},
         },
         "states": [
             {"name": "A", "to": "B"},

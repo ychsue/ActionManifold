@@ -43,7 +43,7 @@ def test_orch_after_decision_applies_metadata_delta():
             {"name": "A"},
         ],
         "registry": {
-            "A": {"class": StateMachine},
+            "A": {"class_": StateMachine},
         },
         "initial": "A"
     })

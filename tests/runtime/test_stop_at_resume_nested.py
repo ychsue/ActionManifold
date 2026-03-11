@@ -46,7 +46,7 @@ def rootflow():
         "initial": "A",
         "registry": {
             "A": CountSMFactory("A"),
-            "Sub": {"class": Orchestrator, "subflow": subflow()},
+            "Sub": {"class_": Orchestrator, "subflow": subflow()},
             "Y": CountSMFactory("Y"),
             "Z": CountSMFactory("Z"),
         }

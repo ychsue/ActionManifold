@@ -21,7 +21,7 @@ async def test_metadata_delta_running():
             {"name": "A"},
         ],
         "registry": {
-            "A": {"class": SetMetaSM},
+            "A": {"class_": SetMetaSM},
         },
         "initial": "A",
     })
