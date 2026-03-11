@@ -1,3 +1,35 @@
+# [2026-03-11] 處理 ctx 與 metadata 的邏輯與初始化的問題
+
+#### 🌱 ctx = lexical scope（配置、參數、初始化、局部狀態）
+
+- 由 playbook 決定  
+- 由 ini_child 建立  
+- 有層級（parent/child）  
+- replay/resume 透過 ctx_delta mimic  
+- 適合：
+  - per‑state initialization  
+  - configuration  
+  - parameters  
+  - local state  
+  - nested flow 的 lexical environment  
+
+---
+
+#### 🌊 metadata = global runtime signals（跨 state、跨 flow、跨層級）
+
+- 由 orchestrator 控制  
+- flat dict  
+- snapshot 在 event_log  
+- replay/resume mimic metadata snapshot  
+- 適合：
+  - user input  
+  - retry counters  
+  - metrics  
+  - orchestration-level flags  
+  - cross‑cutting runtime info  
+
+---
+
 # [2026-03-07] SM._run 改吃 wrapped_metadata
 順便也把 `run(mode=...)` 改成 `run(sm_mode=...)` 因為他是給 SM 的，與 `rehearsal.mode` 是流程級的不一樣。
 

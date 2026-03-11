@@ -1,6 +1,7 @@
 # tests/runtime/test_state_machine.py
 
 import asyncio
+from typing import Any, Dict
 import pytest
 
 from am_core.ctx.context import Ctx
@@ -21,6 +22,11 @@ class EchoState(StateMachine):
     async def _run(self, wrapped_metadata: WrappedMetadata):
         self.emit({"type": "echo", "meta": wrapped_metadata._real})
         return {"status": "ok", "echo": wrapped_metadata._real}
+    
+    async def predict_output(self) -> Dict[str, Any]:
+        output = (await super().predict_output())
+        output["echo"] = 1
+        return output
 
 @pytest.mark.asyncio
 async def test_state_machine_emit_and_run():

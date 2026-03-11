@@ -28,7 +28,8 @@ INTERNAL_STATES = {
 #             "switch": Optional[dict[str,str]],
 #             "timeout": Optional[number],
 #             "retry_times": Optional[number],
-
+#             "init": Optional[dict],          # per-state initialization, passed to ctx.child() when ini_child
+#             "use_parent_metadata": Optional[bool], # whether to pass down parent metadata to this state. default is True for SM but False for other states. if False, the state starts with empty metadata.
 #             # constructor info
 #             "class": Optional[str],        # Python class path
 #             "subflow": Optional[str|dict], # nested Playbook
@@ -44,6 +45,31 @@ INTERNAL_STATES = {
 #         }
 #     }
 # }
+from typing import TypedDict, NotRequired, Dict, List, Any
+
+class StateDef(TypedDict, total=False):
+    name: str
+    to: str
+    switch: Dict[str, str]
+    timeout: float
+    retry_times: int
+    init: Dict[str, Any] # per-state initialization, passed to ctx.child() when ini_child
+    use_parent_metadata: bool
+    class_: str  # 注意：Python 保留字 class，建議改名 class_
+    subflow: Any
+    builtin: str
+    workdir: str
+
+class RegistryEntry(TypedDict, total=False):
+    class_: Any  # 注意：Python 保留字 class，建議改名 class_
+    subflow: Optional[Playbook]
+    workdir: Optional[str]
+class PlaybookDict(TypedDict, total=False):
+    initial: str
+    final: List[str]
+    states: List[StateDef]
+    registry: Dict[str, RegistryEntry]
+
 
 class Playbook:
     """

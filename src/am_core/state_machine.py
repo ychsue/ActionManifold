@@ -3,41 +3,129 @@
 from __future__ import annotations
 from typing import Any, Dict, Optional
 
-from am_core.ctx.ctx_wrapper import CtxDeltaCollector, WrappedCtx
+from am_core.ctx.ctx_wrapper import WrappedCtx
 from am_core.ctx.metadata_wrapper import MetadataDeltaCollector, WrappedMetadata
 
-from .ctx.context import Ctx
+from typing import Generic, TypeVar
 
+from typing import Mapping, MutableMapping
 
-class StateMachine:
+TOutput = TypeVar("TOutput", bound=Mapping[str, Any])
+TCtxWrite = TypeVar("TCtxWrite", bound=Mapping[str, Any])
+TMetadata = TypeVar("TMetadata", bound=Mapping[str, Any])
+
+class StateMachine(Generic[TOutput, TCtxWrite, TMetadata]):
+    """
+    三種模式（normal / preview / interactive_simulate）都共用同一套 domain logic：
+
+    normal：compute + side effect
+    preview：compute（無 side effect）
+    interactive_simulate：compute（無 side effect）+ await_input
+
+    ---    
+    Schema and typing (optional)
+    StateMachine supports optional generics to help IDEs and type checkers:
+    
+    See `examples/example_sm_with_type.py` with its test in `tests/test_typed_predict.py` for a demonstration of how to use generics to specify the expected output, ctx_delta, and metadata shapes.
+
+    TypedDict optional keys are supported via typing_extensions.NotRequired. If you omit generics (class MySM(StateMachine):) the system remains fully functional; generics only improve editor/type-checker assistance.
+
+    ---
+    四個可複寫的方法：
+    1. predict_output(self) -> TOutput：純計算，回傳 output
+    2. predict_ctx_delta(self) -> list[TCtxWrite]：回傳 ctx_delta（list[dict]）
+    3. predict_metadata_delta(self) -> TMetadata|dict：回傳 metadata_delta（dict）
+    4. _run(self, wrapped_metadata) -> TOutput：真正執行 side effect 的方法，只有 normal 模式會執行。preview / interactive 模式不會執行。
+       裡面在處理 output、ctx_delta、metadata_delta 的 side effect。這三個，可以透過呼叫 predict_output / predict_ctx_delta / predict_metadata_delta 來拿到預期的 output / delta，或直接用 self.wrapped_metadata.get() 來拿真實 metadata。
+    """
+
     def __init__(self, wrapped_ctx: WrappedCtx, parent: Optional[Any] = None, name: Optional[str] = None):
         self.wrapped_ctx = wrapped_ctx
         self.parent = parent
         self.name = name
-        self._metadata_delta = MetadataDeltaCollector()
-        self.wrapped_metadata = None
 
+        self._metadata_delta = MetadataDeltaCollector()
+        self.wrapped_metadata: Optional[WrappedMetadata] = None
+
+    # ------------------------------------------------------------
+    # 主入口：三種模式
+    # ------------------------------------------------------------
     async def run(self, metadata, sm_mode="normal"):
-        wrapped_ctx = self.wrapped_ctx
         self.wrapped_metadata = WrappedMetadata(metadata, self._metadata_delta)
 
-        if sm_mode == "normal":
-            output = await self._run(self.wrapped_metadata)
-        elif sm_mode == "preview":
-            output = await self._preview(self.wrapped_metadata)
-        elif sm_mode == "interactive_simulate":
-            output = await self._interactive_simulate(self.wrapped_metadata)
-        else:
-            raise ValueError(f"Unknown mode: {sm_mode}")
+        # 1. 執行 domain logic（pure compute）
+        output = await self.predict_output()
+        ctx_delta = await self.predict_ctx_delta()
+        metadata_delta = await self.predict_metadata_delta()
 
+        # 2. 三種模式決定 side effect 與 await_input
+        if sm_mode == "normal":
+            output_run = await self._run(self.wrapped_metadata)
+            ctx_delta_run = list(self.wrapped_ctx._delta.ops)  # 轉成一般 list，方便序列化
+            metadata_delta_run = dict(self._metadata_delta.ops)
+            # 確認這三個的keys 是否有分別在 output, ctx_delta, metadata_delta 三個變數中，如果沒有，要emit warning
+            for key in output_run.keys():
+                if key not in output:
+                    self.emit({
+                        "type": "warning",
+                        "message": f"State {self.name}: output key '{key}' is not in predict_output() result",
+                    })
+            
+            if len(ctx_delta) != 0:
+                ## ctx_delta 與 ctx_delta_run 都先轉成 [item["mode"]_item["key"]] 的形式，然後才比較，好找出不同的 mode_key 來
+                ctx_delta_mode_key_run = [f"{item['mode']}_{item['key']}" for item in ctx_delta_run]
+                ctx_delta_mode_key = [f"{item['mode']}_{item['key']}" for item in ctx_delta]
+                for mode_key in ctx_delta_mode_key_run:
+                    if mode_key not in ctx_delta_mode_key:
+                        self.emit({
+                            "type": "warning",
+                            "message": f"State {self.name}: ctx_delta key '{mode_key}' is not in predict_ctx_delta() result",
+                        })
+            if len(metadata_delta) != 0:
+                for key in metadata_delta_run.keys():
+                    if key not in metadata_delta:
+                        self.emit({
+                            "type": "warning",
+                            "message": f"State {self.name}: metadata_delta key '{key}' is not in predict_metadata_delta() result",
+                        })
+            # 複寫 output, ctx_delta, metadata_delta 為真正執行的結果
+            output = output_run
+            ctx_delta = ctx_delta_run
+            metadata_delta = metadata_delta_run
+        elif sm_mode == "interactive_simulate":
+            # interactive 模式：停下來等使用者
+            return {
+                "status": "await_input",
+                "is_SM": True,
+                "output": output,
+                "ctx_delta": ctx_delta,
+                "metadata_delta": metadata_delta,
+                "await": {
+                    "kind": "interactive_simulate",
+                    "state": self.name,
+                    "suggested": {
+                        "output": output,
+                        "ctx_delta": ctx_delta,
+                        "metadata_delta": metadata_delta,
+                    },
+                },
+            }
+
+        # preview：不做 side effect，但仍然 apply delta（由 ORCH.after_decision）
+        # normal：做 side effect
+
+        # 3. 回傳結果（ORCH.after_decision 會 apply delta）
         return {
             "status": output.get("status", "ok"),
             "is_SM": True,
             "output": output,
-            "ctx_delta": list(wrapped_ctx._delta.ops),  # 轉成一般 list，方便序列化
-            "metadata_delta": dict(self._metadata_delta.ops),
+            "ctx_delta": ctx_delta,
+            "metadata_delta": metadata_delta,
         }
 
+    # ------------------------------------------------------------
+    # event 冒泡
+    # ------------------------------------------------------------
     def emit(self, event: Dict[str, Any]) -> None:
         """
         將事件往 parent 冒泡。
@@ -45,27 +133,36 @@ class StateMachine:
         """
         if self.parent and hasattr(self.parent, "emit"):
             self.parent.emit(event)
-
-    # --- 三種策略：子類別可以覆寫這三個 ---
-
-    async def _run(self, wrapped_metadata: WrappedMetadata) -> Dict[str, Any]:
+    # ------------------------------------------------------------
+    # Domain Logic（使用者覆寫這三個）
+    # ------------------------------------------------------------
+    async def predict_output(self) -> TOutput:
         """
-        真實執行：有 side effect、有真實 ctx_delta / metadata_delta
+        使用者覆寫：純計算，不做 side effect。
+        """
+        output: TOutput = {"status": "ok"}  # type: ignore
+        return output
+
+    async def predict_ctx_delta(self) -> list[TCtxWrite]:
+        """
+        使用者覆寫：回傳 ctx_delta（list[dict]）
+        """
+        return []
+
+    async def predict_metadata_delta(self) -> TMetadata|dict:
+        """
+        使用者覆寫：回傳 metadata_delta（dict）
+        """
+        return dict[str, Any]()
+
+    # ------------------------------------------------------------
+    # Side Effect（只有 normal 模式會執行）
+    # ------------------------------------------------------------
+    async def _run(self, wrapped_metadata: WrappedMetadata) -> TOutput:
+        """
+        使用者可覆寫：真實 side effect（寫檔、API call、DB、外部世界）\\
+        preview / interactive 模式不會執行。\\
+        裡面在處理 output、ctx_delta、metadata_delta 的 side effect。\\
+        這三個，可以透過呼叫 predict_output / predict_ctx_delta / predict_metadata_delta 來拿到預期的 output / delta，或直接用 self.wrapped_metadata.get() 來拿真實 metadata。
         """
         raise NotImplementedError
-
-    async def _preview(self, wrapped_metadata: WrappedMetadata) -> Dict[str, Any]:
-        """
-        預演：無 side effect，但要產生「模擬的」 output / ctx_delta / metadata_delta
-        預設行為：直接呼叫 _run（子類別可以覆寫成純計算版）
-        """
-        return await self._run(wrapped_metadata)
-
-    async def _interactive_simulate(self, wrapped_metadata: WrappedMetadata) -> Dict[str, Any]:
-        """
-        互動模擬：無 side effect，但會停下來讓使用者調整 ctx_delta / metadata_delta
-        預設行為：先用 _preview 拿預設值，再給上層（UI）決定怎麼問人
-        """
-        preview_output = await self._preview(wrapped_metadata)
-        # 這裡先保留 hook，之後我們再決定怎麼跟 UI 對話
-        return preview_output

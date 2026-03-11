@@ -288,7 +288,13 @@ class Orchestrator:
     def ini_child(self, current_state: str, parent_state: str):
         state_def = self.playbook.get_state_def(current_state)
         ctor = self.playbook.get_state_constructor(current_state)
-        child_ctx = self.ctx.child(current_state=current_state, parent_state=parent_state)
+        
+        # 取得 per-state initialization
+        child_ctx = self.ctx.child(
+            current_state=current_state, 
+            parent_state=parent_state,
+            **state_def.get("init", {})
+        )
         child = self._instantiate_child(current_state, child_ctx, ctor)
         return state_def, child_ctx, child
 
@@ -299,15 +305,17 @@ class Orchestrator:
         timeout_setting = state_def.get("timeout")
         timeout_flag = False
         start_time = loop.time()
+        
+        child_metadata = self.metadata if state_def.get("use_parent_metadata", False) or isinstance(child, StateMachine) else None
 
         try:
             if timeout_setting is not None:
                 sm_output = await asyncio.wait_for(
-                    child.run(self.metadata, sm_mode=sm_mode),
+                    child.run(child_metadata, sm_mode=sm_mode),
                     timeout=float(timeout_setting),
                 )
             else:
-                sm_output = await child.run(self.metadata, sm_mode=sm_mode)
+                sm_output = await child.run(child_metadata, sm_mode=sm_mode)
         except asyncio.TimeoutError:
             sm_output = {"status": "timeout"}
             timeout_flag = True
