@@ -3,6 +3,8 @@
 from __future__ import annotations
 from typing import Any, Dict, List, Optional
 
+from am_core.utils import dynamic_import
+
 
 class Ctx:
     """
@@ -138,6 +140,41 @@ class Ctx:
 
             else:
                 raise ValueError(f"Unknown write mode: {mode}")
+            
+    from am_core.interactive.types import InteractiveAdapter
+    # -------------------------
+    # InteractiveAdapter 相關
+    # -------------------------
+    def get_interactive_adapter(self) -> Optional[InteractiveAdapter]:
+        # 1. 先確認是否有 instance（測試專用）
+        instance = self.get("_interactive_adapter_instance")
+        if instance:
+            return instance
+        else:
+            self.set_interactive_adapter(None)  # 預設 CLIAdapter
+            return self.get("_interactive_adapter_instance")
+
+    def set_interactive_adapter(self, adapter: Optional[InteractiveAdapter|str]) -> None:
+        from am_core.interactive.types import InteractiveAdapter
+        from am_core.interactive.adapters.cli_adapter import CLIAdapter
+        if isinstance(adapter, InteractiveAdapter):
+            adapter_path = f"{adapter.__class__.__module__}.{adapter.__class__.__name__}"
+            self.set("interactive_adapter", adapter_path)
+            self.set("_interactive_adapter_instance", adapter)
+        elif isinstance(adapter, str):
+            self.set("interactive_adapter", adapter)
+            adapter_cls = dynamic_import(adapter)
+            self.set("_interactive_adapter_instance", adapter_cls())
+        elif adapter is None:
+            adapter_path = self.get("interactive_adapter")
+            if adapter_path is None:
+                self.set("interactive_adapter", "am_core.interactive.adapters.cli_adapter.CLIAdapter")
+                self.set("_interactive_adapter_instance", CLIAdapter())
+            else:
+                adapter_cls = dynamic_import(adapter_path)
+                self.set("_interactive_adapter_instance", adapter_cls())
+        else:
+            raise ValueError("adapter must be InteractiveAdapter instance, string path, or None")
 
     # -------------------------
     # debug

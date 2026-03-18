@@ -13,6 +13,7 @@ from am_core.state_machine import StateMachine
 class DummyParent:
     def __init__(self):
         self.events = []
+        self.name = "DummyParent"
 
     def emit(self, event):
         self.events.append(event)

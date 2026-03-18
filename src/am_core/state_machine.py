@@ -1,7 +1,8 @@
 # src/am_core/state_machine.py
 
 from __future__ import annotations
-from typing import Any, Dict, Optional
+from sqlite3 import adapt
+from typing import Any, Dict, List, Optional
 
 from am_core.ctx.ctx_wrapper import WrappedCtx
 from am_core.ctx.metadata_wrapper import MetadataDeltaCollector, WrappedMetadata
@@ -9,6 +10,8 @@ from am_core.ctx.metadata_wrapper import MetadataDeltaCollector, WrappedMetadata
 from typing import Generic, TypeVar
 
 from typing import Mapping, MutableMapping
+
+from am_core.interactive.types import InteractiveAdapter
 
 TOutput = TypeVar("TOutput", bound=Mapping[str, Any])
 TCtxWrite = TypeVar("TCtxWrite", bound=Mapping[str, Any])
@@ -57,9 +60,22 @@ class StateMachine(Generic[TOutput, TCtxWrite, TMetadata]):
         output = await self.predict_output()
         ctx_delta = await self.predict_ctx_delta()
         metadata_delta = await self.predict_metadata_delta()
+        
+        actual_sm_mode = sm_mode
+        adapter: Optional[InteractiveAdapter] = None
+        if sm_mode == "interactive_simulate":
+            # 如果是 interactive_simulate 模式，先由 truely_execute 來確認是否讓這個SM是真的執行，而非互動式模擬 (因為使用者可能想要讓他真的跑，好達到手動一步一步執行的效果）
+            adapter = self.wrapped_ctx._real.get_interactive_adapter()
+            if adapter is None:
+                raise ValueError("Interactive mode requires an interactive adapter, but none was found in context.")
+            truely_execute = await adapter.truely_execute()
+            if truely_execute:
+                actual_sm_mode = "normal"
+            else:
+                actual_sm_mode = "interactive_simulate"
 
         # 2. 三種模式決定 side effect 與 await_input
-        if sm_mode == "normal":
+        if actual_sm_mode == "normal":
             output_run = await self._run(self.wrapped_metadata)
             ctx_delta_run = list(self.wrapped_ctx._delta.ops)  # 轉成一般 list，方便序列化
             metadata_delta_run = dict(self._metadata_delta.ops)
@@ -92,24 +108,41 @@ class StateMachine(Generic[TOutput, TCtxWrite, TMetadata]):
             output = output_run
             ctx_delta = ctx_delta_run
             metadata_delta = metadata_delta_run
-        elif sm_mode == "interactive_simulate":
-            # interactive 模式：停下來等使用者
-            return {
-                "status": "await_input",
-                "is_SM": True,
-                "output": output,
-                "ctx_delta": ctx_delta,
-                "metadata_delta": metadata_delta,
-                "await": {
-                    "kind": "interactive_simulate",
-                    "state": self.name,
-                    "suggested": {
-                        "output": output,
-                        "ctx_delta": ctx_delta,
-                        "metadata_delta": metadata_delta,
-                    },
+        elif actual_sm_mode == "interactive_simulate":
+            # # interactive 模式：停下來等使用者
+            # return {
+            #     "status": "await_input",
+            #     "is_SM": True,
+            #     "sm_mode": actual_sm_mode,
+            #     "output": output,
+            #     "ctx_delta": ctx_delta,
+            #     "metadata_delta": metadata_delta,
+            #     "await": {
+            #         "kind": "interactive_simulate",
+            #         "state": self.name,
+            #         "suggested": {
+            #             "output": output,
+            #             "ctx_delta": ctx_delta,
+            #             "metadata_delta": metadata_delta,
+            #         },
+            #     },
+            # }
+            # interactive 模式：透過 adapter 來處理互動，並等待結果
+            if adapter is None:
+                raise ValueError("elif actual_sm_mode == 'interactive_simulate': Interactive mode requires an interactive adapter, but none was found in context.")
+            modified = await adapter.handle({
+                "kind": "await_input",
+                "state": self.name if self.name else "unnamed_state",
+                "suggested": {
+                    "output": dict(output),
+                    "ctx_delta": [dict(item) for item in ctx_delta],
+                    "metadata_delta": dict(metadata_delta),
                 },
-            }
+                "ui_hint": self._ui_hint() if hasattr(self, "_ui_hint") else {},
+            })
+            output = modified["output"]
+            ctx_delta = modified["ctx_delta"]
+            metadata_delta = modified["metadata_delta"]
 
         # preview：不做 side effect，但仍然 apply delta（由 ORCH.after_decision）
         # normal：做 side effect
@@ -118,10 +151,23 @@ class StateMachine(Generic[TOutput, TCtxWrite, TMetadata]):
         return {
             "status": output.get("status", "ok"),
             "is_SM": True,
+            "sm_mode": actual_sm_mode,
+            "chain": self.get_chain(),
             "output": output,
             "ctx_delta": ctx_delta,
             "metadata_delta": metadata_delta,
         }
+
+    #------------------------------------------------------------
+    # 取得整個 orch->....->state 的 chain
+    def get_chain(self) -> List[str]:
+        chain = []
+        current = self
+        while current is not None:
+            if current.name:
+                chain.append(current.name)
+            current = getattr(current, "parent", None)
+        return list(reversed(chain))
 
     # ------------------------------------------------------------
     # event 冒泡
@@ -166,3 +212,9 @@ class StateMachine(Generic[TOutput, TCtxWrite, TMetadata]):
         這三個，可以透過呼叫 predict_output / predict_ctx_delta / predict_metadata_delta 來拿到預期的 output / delta，或直接用 self.wrapped_metadata.get() 來拿真實 metadata。
         """
         raise NotImplementedError
+
+    def _ui_hint(self) -> Dict[str, Any]:
+        """
+        使用者可覆寫：提供給 interactive adapter 的 UI hint，讓 adapter 可以根據不同 state 顯示不同的 UI。
+        """
+        return {}

@@ -1,3 +1,7 @@
+# [2026-03-18] 有 interactive simulate 的雛型了，但還等待修改一些問題
+1. [ ] [run_watcher](src\am_core\run_watcher.py) 顯然在 metadata_delta 等的處理，還有timeout 等有問題，要思考一下
+2. [ ] event_log 回播等所需要的資料應該要有更多資訊，好使 interactive simulate 可以有更好的UI體驗
+
 # [2026-03-11] 將 Playbook 的 "class" 改為 "class_"，順便給他套上 `PlaybookDict` 的型別與優化
 
 # [2026-03-11] 處理 ctx 與 metadata 的邏輯與初始化的問題
