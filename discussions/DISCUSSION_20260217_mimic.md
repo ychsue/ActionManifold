@@ -7471,7 +7471,7 @@ metadata_patch={"A": {...}}
 
 ---
 
-##### [x] **建議 1：StateMachine.run 裡的 await_input 結構應該統一格式**
+##### **建議 1：StateMachine.run 裡的 await_input 結構應該統一格式**
 
 你現在的 interactive 模式是：
 
@@ -7532,7 +7532,7 @@ truely_execute = await adapter.truely_execute(await_input)
 
 ---
 
-##### [ ] **建議 3：Orchestrator.run 應該記錄 event_log（mode + truely_execute）**
+##### **建議 3：Orchestrator.run 應該記錄 event_log（mode + truely_execute）**
 
 你現在還沒有 event_log 的語意。  
 我建議你在 ORCH.after_decision 裡記錄：
@@ -7558,7 +7558,7 @@ truely_execute = await adapter.truely_execute(await_input)
 
 ---
 
-##### [x] **建議 4：FakeAdapter 的 patch key（state name）應該支援 wildcard**
+##### **建議 4：FakeAdapter 的 patch key（state name）應該支援 wildcard**
 
 例如：
 
@@ -7576,7 +7576,7 @@ FakeAdapter(output_patch={"*": {"value": 999}})
 
 ---
 
-#### [ ] 🌟 C. run_watcher 的問題（你已經注意到）
+#### 🌟 C. run_watcher 的問題（你已經注意到）
 
 你說：
 

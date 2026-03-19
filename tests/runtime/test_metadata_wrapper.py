@@ -1,4 +1,5 @@
 
+from am_core.run_watcher import run_watcher
 from am_core.ctx.metadata_wrapper import MetadataDeltaCollector, WrappedMetadata
 
 
@@ -59,7 +60,16 @@ def test_orch_after_decision_applies_metadata_delta():
         "output": {},
     }
 
-    enriched = {"event": {"output": sm_output}}
+    enriched = run_watcher(
+                    state_name="A",
+                    state_def={"timeout": 10},
+                    sm_output=sm_output,
+                    metadata={},
+                    start_time=0,
+                    end_time=5,
+                    timeout_flag=False,
+                    parent_state="Root",
+                )
 
     orch.after_decision(
         event_id="1",

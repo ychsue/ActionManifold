@@ -78,6 +78,12 @@ def run_watcher(
             # retry 已用完，維持 fail
             pass
 
+    # 如果是 SM，就要再把 sm_output 裡面的 metadata_delta 也合併進來，
+    if sm_output.get("is_SM") and sm_output.get("metadata_delta"):
+        buf = dict(sm_output["metadata_delta"])
+        buf.update(metadata_delta)  # 以 run_watcher 的 metadata_delta 為主，因為它是根據原本的 metadata 加上 SM 修改後的 metadata_delta 計算出來的
+        metadata_delta = buf
+
     # --- event 結構 ---
 
     event: Dict[str, Any] = {

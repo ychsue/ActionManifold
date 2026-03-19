@@ -1,6 +1,11 @@
+# [2026-03-19] 給 Orch 再補強一下
+
 # [2026-03-18] 有 interactive simulate 的雛型了，但還等待修改一些問題
-1. [ ] [run_watcher](src\am_core\run_watcher.py) 顯然在 metadata_delta 等的處理，還有timeout 等有問題，要思考一下
-2. [ ] event_log 回播等所需要的資料應該要有更多資訊，好使 interactive simulate 可以有更好的UI體驗
+1. [x] [run_watcher](src\am_core\run_watcher.py) 顯然在 metadata_delta 等的處理，還有timeout 等有問題，要思考一下
+   1. 也就是說， `output` 是給下一個， `metadata` 是給 orchestrator 的，而 `ctx` 則是整個活動的上下文
+   2. 所以，當 SM 回傳的時候，產生了metadata_delta 是給 orchestrator 的，然而，會經過 run_watcher 再判讀後就更新 metadata_delta。
+2. [x] event_log 回播等所需要的資料應該要有更多資訊，好使 interactive simulate 可以有更好的UI體驗
+   1. 有在 event_log 裡面的 sm_output 裡面有放入 chain 和 mode 的資料
 
 # [2026-03-11] 將 Playbook 的 "class" 改為 "class_"，順便給他套上 `PlaybookDict` 的型別與優化
 

@@ -80,7 +80,7 @@ class Orchestrator:
         self.ctx = ctx
         self.parent = parent
         self.metadata: Dict[str, Any] = metadata or {}
-        self.name = name
+        self.name = name if name else ctx.get("current_state", "root")
         self.events: List[Dict[str, Any]] = []
 
         # rehearsal 初始化
@@ -359,13 +359,19 @@ class Orchestrator:
         # running
         enriched_event = enriched.get("event", {}) or {}
         sm_output = enriched_event.get("output", {}) or {}
-        # 如果是SM，要套用 ctx_delta 與 metadata_delta
+        # 如果是SM，要套用 ctx_delta 與 metadata_delta，而 metadata_delta 有可能被 run_watcher 修改（例如 retry 的時候），所以要以 run_watcher 的結果為主
         if sm_output.get("is_SM"):
             if sm_output.get("ctx_delta"):
                 child_ctx.apply_writes(sm_output["ctx_delta"], into_writes=True)
 
-            if sm_output.get("metadata_delta"):
-                self.metadata.update(sm_output["metadata_delta"])
+            if enriched_event.get("metadata_delta"):
+                # 特別處理 retries 的 metadata_delta，因為 metadata["retries"] 是一個 dict，所以他也要用 update 的方式來合併，而不是直接覆蓋
+                retries = dict(self.metadata["retries"]) if "retries" in self.metadata else {}
+                if "retries" in enriched_event["metadata_delta"]:
+                    retries_delta = enriched_event["metadata_delta"]["retries"]
+                    retries.update(retries_delta)
+                self.metadata.update(enriched_event["metadata_delta"])
+                self.metadata["retries"] = retries
         exit_event = {
             "id": event_id,
             "kind": "after_decision",
