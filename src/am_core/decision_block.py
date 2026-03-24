@@ -20,8 +20,10 @@ def decision_block(playbook: Playbook, current_state: str, enriched_output: Dict
         sw = state_def["switch"]
         if sm_status in sw:
             return sw[sm_status]
-        # 若沒有對應，視為結束
-        return None
+        # # 若沒有對應，視為結束
+        # return None
+        # 若沒有對應，則要顯示錯誤
+        raise ValueError(f"State {current_state} has switch but no case for status '{sm_status}'")
 
     # 2. to 語意
     if "to" in state_def:

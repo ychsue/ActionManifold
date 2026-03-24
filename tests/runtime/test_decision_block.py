@@ -109,14 +109,16 @@ def test_missing_switch_key_returns_none():
 
     enriched = {"status": "unknown_status"}
 
-    next_state = decision_block(
-        playbook=pb,
-        current_state="NextState",
-        enriched_output=enriched,
-    )
-
-    assert next_state is None
-
+    # 應該會 raise an error，因為 switch 裡沒有對應的 key
+    try:
+        next_state = decision_block(
+            playbook=pb,
+            current_state="NextState",
+            enriched_output=enriched,
+        )
+        assert False, "Expected ValueError for missing switch key"
+    except ValueError as e:
+        assert "no case for status 'unknown_status'" in str(e)
 
 def test_final_state_has_no_next():
     """

@@ -12,7 +12,7 @@ class MetadataDeltaCollector:
     def set(self, key: str, value: Any) -> None:
         self.ops[key] = value
 
-    def clear(self):
+    def clear(self) -> None:
         self.ops.clear()
 
 
@@ -27,7 +27,8 @@ class WrappedMetadata:
         self._real = real_metadata
         self._delta = delta
 
-    def get(self, key: str, default=None):
+    # 輸出的 type 若 default 非 None 時，就是 default 的 type；若 default 是 None，則輸出 Any
+    def get(self, key: str, default: Any = None) -> Any:
         if key in self._delta.ops:
             value = self._delta.ops[key]
             if value is None:
@@ -35,5 +36,5 @@ class WrappedMetadata:
             return value
         return self._real.get(key, default)
 
-    def set(self, key: str, value: Any):
+    def set(self, key: str, value: Any) -> None:
         self._delta.set(key, value)

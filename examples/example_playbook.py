@@ -1,12 +1,12 @@
 from am_core.state_machine import StateMachine
 
 class StartStateClass(StateMachine):
-    async def run(self):
+    async def _run(self, wrapped_metadata):
         # Implementation of StartState
         pass
 
 class NextStateClass(StateMachine):
-    async def run(self):
+    async def _run(self, wrapped_metadata):
         # Implementation of NextState
         pass
 

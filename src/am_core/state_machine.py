@@ -11,7 +11,7 @@ from typing import Generic, TypeVar
 
 from typing import Mapping, MutableMapping
 
-from am_core.interactive.types import InteractiveAdapter
+from am_core.interactive.types import AwaitInput, InteractiveAdapter
 
 TOutput = TypeVar("TOutput", bound=Mapping[str, Any])
 TCtxWrite = TypeVar("TCtxWrite", bound=Mapping[str, Any])
@@ -63,12 +63,24 @@ class StateMachine(Generic[TOutput, TCtxWrite, TMetadata]):
         
         actual_sm_mode = sm_mode
         adapter: Optional[InteractiveAdapter] = None
+        # await_input 的資料結構，只在 interactive_simulate 模式下會用到
+        await_input_data: AwaitInput = {
+            "kind": "interactive_simulate",
+            "state": self.name if self.name else "unnamed_state",
+            "suggested": {
+                "output": dict(output),
+                "ctx_delta": [dict(item) for item in ctx_delta],
+                "metadata_delta": dict(metadata_delta),
+            },
+            "ui_hint": self._ui_hint() if hasattr(self, "_ui_hint") else {},
+            "chain": self.get_chain(),
+        }
         if sm_mode == "interactive_simulate":
             # 如果是 interactive_simulate 模式，先由 truely_execute 來確認是否讓這個SM是真的執行，而非互動式模擬 (因為使用者可能想要讓他真的跑，好達到手動一步一步執行的效果）
             adapter = self.wrapped_ctx._real.get_interactive_adapter()
             if adapter is None:
                 raise ValueError("Interactive mode requires an interactive adapter, but none was found in context.")
-            truely_execute = await adapter.truely_execute()
+            truely_execute = await adapter.truely_execute(await_input_data)
             if truely_execute:
                 actual_sm_mode = "normal"
             else:
@@ -130,16 +142,7 @@ class StateMachine(Generic[TOutput, TCtxWrite, TMetadata]):
             # interactive 模式：透過 adapter 來處理互動，並等待結果
             if adapter is None:
                 raise ValueError("elif actual_sm_mode == 'interactive_simulate': Interactive mode requires an interactive adapter, but none was found in context.")
-            modified = await adapter.handle({
-                "kind": "await_input",
-                "state": self.name if self.name else "unnamed_state",
-                "suggested": {
-                    "output": dict(output),
-                    "ctx_delta": [dict(item) for item in ctx_delta],
-                    "metadata_delta": dict(metadata_delta),
-                },
-                "ui_hint": self._ui_hint() if hasattr(self, "_ui_hint") else {},
-            })
+            modified = await adapter.handle(await_input=await_input_data)
             output = modified["output"]
             ctx_delta = modified["ctx_delta"]
             metadata_delta = modified["metadata_delta"]
@@ -160,6 +163,7 @@ class StateMachine(Generic[TOutput, TCtxWrite, TMetadata]):
 
     #------------------------------------------------------------
     # 取得整個 orch->....->state 的 chain
+    #------------------------------------------------------------
     def get_chain(self) -> List[str]:
         chain = []
         current = self
@@ -216,5 +220,6 @@ class StateMachine(Generic[TOutput, TCtxWrite, TMetadata]):
     def _ui_hint(self) -> Dict[str, Any]:
         """
         使用者可覆寫：提供給 interactive adapter 的 UI hint，讓 adapter 可以根據不同 state 顯示不同的 UI。
+        switch 所需要的 `status` key 也可以放在這裡，
         """
-        return {}
+        return {"note": "No UI hint provided for this state.\nYou can override the _ui_hint() method to provide custom UI hints for interactive mode. For example, allowed `status` values."}

@@ -12,6 +12,7 @@ class AwaitSuggested(TypedDict):
 class AwaitInput(TypedDict):
     kind: str                     # "interactive_simulate"
     state: str                    # state name
+    chain: List[str]              # state chain (for debugging / UI hint)
     suggested: AwaitSuggested     # default values from predict_*
     ui_hint: NotRequired[Dict[str, Any]]  # optional UI schema
 
@@ -31,5 +32,5 @@ class InteractiveAdapter:
     async def handle(self, await_input: AwaitInput) -> ModifiedDecision:
         raise NotImplementedError
     
-    async def truely_execute(self) -> bool:
+    async def truely_execute(self, await_input: AwaitInput) -> bool:
         return False

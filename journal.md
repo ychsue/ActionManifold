@@ -1,3 +1,5 @@
+# [2026-03-23] Interactive simulate 的功能已經完成了，試驗中
+
 # [2026-03-19] 給 Orch 再補強一下
 
 # [2026-03-18] 有 interactive simulate 的雛型了，但還等待修改一些問題
