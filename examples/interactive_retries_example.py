@@ -8,6 +8,11 @@ from am_core.state_machine import StateMachine
 class FailTwice(StateMachine):
     async def predict_output(self):
         return {"status": "ok", "state": self.name}
+    
+    def _ui_hint(self):
+        return {
+            "status": ["ok", "fail"]
+        }
 
     async def _run(self, wrapped_metadata):
         retries = wrapped_metadata.get("retries", {}).get(self.name, 0)

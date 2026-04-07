@@ -5,11 +5,13 @@ from __future__ import annotations
 import time
 from typing import Any, Dict, Optional
 
+from am_core.playbook import StateDef
+
 
 def run_watcher(
     *,
     state_name: str,
-    state_def: Dict[str, Any],
+    state_def: StateDef,
     sm_output: Dict[str, Any],
     metadata: Dict[str, Any],
     start_time: Optional[float] = None,

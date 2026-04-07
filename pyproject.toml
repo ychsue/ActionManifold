@@ -1,7 +1,7 @@
 [project]
 name = "am-core"
-version = "0.1.1"
-description = "ActionManifold Core Development Semantics Engine"
+version = "0.2.0"
+description = "ActionManifold Core Engine (Design-time + Runtime)"
 authors = [
     { name = "Young-Chung Hsue" }
 ]
@@ -25,7 +25,8 @@ dev = ["pytest",
 
 # 這裡是重點：建立 am 指令
 [project.scripts]
-am = "am_core.cli:main"
+am-design = "am_core.design_cli.cli:main"
+am-run = "am_core.runtime_cli.cli:cli"
 
 [build-system]
 requires = ["setuptools>=61.0"]

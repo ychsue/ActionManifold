@@ -176,8 +176,7 @@ class Playbook:
                 if subflow.startswith("playbook:"):
                     rel_path = subflow.split(":", 1)[1]
                     pb_path = Path(self.base_path or ".") / rel_path
-                    with pb_path.open("r", encoding="utf-8") as f:
-                        pb_data = json.load(f)
+                    pb_data = self.load_from_file(str(pb_path)).data
                     ctor["subflow"] = Playbook(pb_data, base_path=str(pb_path.parent))
                 else:
                     raise ValueError(f"Unsupported subflow string for state {state}: {subflow}")
@@ -267,3 +266,15 @@ class Playbook:
             return issubclass(ctor_info["class_"], StateMachine)
         except Exception:
             return False
+        
+    @classmethod
+    def load_from_file(cls, path: str) -> "Playbook":
+        import yaml
+        p = Path(path)
+        if p.suffix == ".json":
+            data = json.loads(p.read_text(encoding="utf-8"))
+        elif p.suffix in [".yaml", ".yml"]:
+            data = yaml.safe_load(p.read_text(encoding="utf-8"))
+        else:
+            raise ValueError(f"Unsupported playbook file format: {path}")
+        return cls(data, base_path=str(p.parent))

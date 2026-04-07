@@ -2,7 +2,7 @@ import pytest
 import tempfile
 from pathlib import Path
 from click.testing import CliRunner
-from am_core.cli import build_graph_from_root
+from am_core.design_cli.cli import build_graph_from_root
 from am_core.feature.feature_unit import FEATURE_UNITS
 
 

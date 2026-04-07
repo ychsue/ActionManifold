@@ -1,3 +1,6 @@
+# [2026-03-31] 正在設法讓 World Manager API 可以動，需要再修改一些東西，還有一些細節要調整，但大致的架構已經完成了，謝謝 Copilot 的幫忙
+world -> manager API -> playbook -> 
+
 # [2026-03-23] Interactive simulate 的功能已經完成了，試驗中
 
 # [2026-03-19] 給 Orch 再補強一下

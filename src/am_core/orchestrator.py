@@ -191,6 +191,17 @@ class Orchestrator:
             # ------------------------------------------------------------
             # 4. 執行 child.run（若不是 replay/stopped）
             # ------------------------------------------------------------
+            isSM = isinstance(child, StateMachine)
+            if isSM:    
+                self.emit({
+                    "kind": "before_sm_execute",
+                    "state": current_state,
+                    "chain": child.get_chain(),
+                    "ctx": child_ctx.dump(),          # 當前 ctx
+                    "metadata": dict(self.metadata),  # 當前 metadata
+                    "timestamp": time.time(),
+                })
+            
             if not pass_execution:
                 sm_output, timeout_flag, start_time, end_time = await self.exec_child(
                     state_def, child, loop, sm_mode=sm_mode
@@ -385,6 +396,18 @@ class Orchestrator:
             "transition": next_state,
         }
         self.emit(exit_event)
+        if sm_output.get("is_SM"):
+            self.emit({
+            "kind": "after_sm_execute",
+            "state": current_state,
+            "chain": sm_output.get("chain"),
+            "ctx_delta": sm_output.get("ctx_delta"),
+            "metadata_delta": sm_output.get("metadata_delta"),
+            "output": sm_output.get("output"),
+            "status": sm_output.get("status"),
+            "timestamp": time.time(),
+            })
+
         rehearsal.event_log.append(exit_event)
         return next_state
 

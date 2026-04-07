@@ -1,0 +1,14 @@
+initial: a1
+final: [a2]
+
+states:
+  - name: a1
+    class_: project.subflows.subflow_a.states.a1.A1
+    to: a2
+
+  - name: subflow_b
+    subflow: playbook:subflow_b/playbook.yaml
+    # class_ 可省略，Playbook.get_state_constructor() 會自動用 Orchestrator
+
+  - name: a2
+    class_: project.subflows.subflow_a.states.a2.A2

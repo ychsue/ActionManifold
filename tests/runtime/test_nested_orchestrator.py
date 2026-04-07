@@ -134,7 +134,7 @@ async def test_nested_orchestrator_execution(tmp_path):
     parent_ctx_values = [
         e.get("parent_state")
         for e in events
-        if e["state"] in ("SubStart", "SubEnd")
+        if e["state"] in ("SubStart", "SubEnd") and e.get("kind") is None
     ]
     assert all(v == "SubFlow" for v in parent_ctx_values)
     

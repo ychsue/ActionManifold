@@ -28,12 +28,11 @@ This CLI automatically:
 
 from typing import List, Optional
 import click
-from traitlets import default
-from .feature.collector import collect_feature_units
-from .feature.feature_unit import feature_unit
-from .graph import FeatureUnitGraph
-from .feature.report import generate_roadmap
-from .feature.visualize import visualize_timeline, visualize_gantt
+from ..feature.collector import collect_feature_units
+from ..feature.feature_unit import feature_unit
+from ..graph import FeatureUnitGraph
+from ..feature.report import generate_roadmap
+from ..feature.visualize import visualize_timeline, visualize_gantt
 
 @click.group()
 def cli():
