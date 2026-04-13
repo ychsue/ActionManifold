@@ -29,12 +29,12 @@ def test_world_describe_project(tmp_path):
 
     desc = world.describe_project()
 
-    assert desc["path"] == ["root"]
+    assert desc["chain"] == ["root"]
     assert "step1" in desc["states"]
     assert "step2" in desc["states"]
     assert len(desc["subflows"]) == 1
 
     sub = desc["subflows"][0]
-    assert sub["path"] == ["root", "subA"]
+    assert sub["chain"] == ["root", "subA"]
     assert "a1" in sub["states"]
     assert "a2" in sub["states"]

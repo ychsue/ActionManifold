@@ -160,7 +160,10 @@ class Playbook:
 
         # 2-2 class：Python class path（"a.b.C"）
         class_path = state_def.get("class_")
-        if class_path:
+        if class_path and class_path.startswith("."):
+            # 相對路徑，交由最上層ORCH或World來解析，Playbook 只負責把它傳下去
+            ctor["class_"] = class_path
+        elif class_path:
             module_name, _, cls_name = class_path.rpartition(".")
             if not module_name or not cls_name:
                 raise ValueError(f"Invalid class path for state {state}: {class_path}")

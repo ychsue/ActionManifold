@@ -31,6 +31,7 @@ class World:
         self.metadata = metadata or {}
         self.ctx = ctx or Ctx(parent=None,current_state= playbook.initial_state())
         self.name = name
+        self.module_root = self._infer_module_root()
 
         # 建立 root orchestrator
         self.root = Orchestrator(
@@ -46,6 +47,16 @@ class World:
         # runtime flags
         self._task = None  # asyncio.Task for the main execution, used for cancellation, status check, etc.
         self._running = False
+
+    def _infer_module_root(self):
+        """
+        根據 playbook 的路徑推斷 module root，這樣在 class_ 中就可以用相對路徑。
+        例如，如果 playbook 在 /path/to/my_project/playbook.yaml，那 module root 就是 my_project。
+        """
+        if self.playbook.base_path is None:
+            return None
+        path = Path(self.playbook.base_path)
+        return path.name
 
     #-------------------------
     # Runtime 控制：start/run/simulate/replay/resume
@@ -169,29 +180,29 @@ class World:
         """
         return self._walk_playbook(self.playbook,["root"])
         
-    def _walk_playbook(self, playbook: Playbook, path: list[str]):
+    def _walk_playbook(self, playbook: Playbook, chain: list[str]):
         node = {
-            "path": path,
-            "file": playbook.base_path,
+            "chain": chain,
+            "base_path": playbook.base_path,
             "states": {},
             "subflows": [],
         }
         for state_name, state_def in playbook.states.items():
             node["states"][state_name] = {
                 "class_": state_def.get("class_"),
-                "subflow": isinstance(state_def.get("subflow"), dict) or isinstance(state_def.get("subflow"), str),
+                "subflow": state_def.get("subflow")
             }
             
             sub = state_def.get("subflow")
             if isinstance(sub, dict):
                 buf = Playbook(sub, base_path=playbook.base_path)
-                node["subflows"].append(self._walk_playbook(buf, path + [state_name]))
+                node["subflows"].append(self._walk_playbook(buf, chain + [state_name]))
             elif isinstance(sub, str) and sub.startswith("playbook:") and playbook.base_path is not None:
                 rel_path = sub.split(":", 1)[1]
                 pb_path = Path(playbook.base_path) / rel_path
                 pb_data = playbook.load_from_file(str(pb_path)).data
                 buf = Playbook(pb_data, base_path=str(pb_path.parent))
-                node["subflows"].append(self._walk_playbook(buf, path + [state_name]))
+                node["subflows"].append(self._walk_playbook(buf, chain + [state_name]))
                 
         return node
 

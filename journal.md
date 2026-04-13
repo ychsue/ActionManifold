@@ -1,3 +1,5 @@
+# [2026-04-13] 現在要搞定 class path 的問題了，為了能順利做大修改，先commit
+
 # [2026-03-31] 正在設法讓 World Manager API 可以動，需要再修改一些東西，還有一些細節要調整，但大致的架構已經完成了，謝謝 Copilot 的幫忙
 world -> manager API -> playbook -> 
 
