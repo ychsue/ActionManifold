@@ -11,4 +11,4 @@ states:
     # class_ 可省略，Playbook.get_state_constructor() 會自動用 Orchestrator
 
   - name: step2
-    class_: project.states.step2.Step2 # 絕對 module path
+    class_: .states.step2.Step2 # 相對於當前 playbook.yaml 的 module path

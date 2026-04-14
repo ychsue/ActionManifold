@@ -13,7 +13,7 @@ from .ctx.context import Ctx
 from .run_watcher import run_watcher
 from .decision_block import decision_block
 from .playbook import Playbook
-from .utils import dynamic_import, generate_event_id
+from .utils import dynamic_import, dynamic_import_from_base_path, generate_event_id
 
 
 # ------------------------------------------------------------
@@ -121,27 +121,21 @@ class Orchestrator:
 
         from .orchestrator import Orchestrator
 
-        # 根據 class_ 的格式來決定如何實例化 child：
-        # 如果是str 而且以"."開頭，表示要由最上層的 World 來解析相對路徑，這樣就可以支援 template_project 裡面的相對路徑寫法（例如 .states.a1.A1）
+        # class_ 若以 "." 開頭，代表它是相對於當前 playbook.base_path 的 class path。
+        # 這類路徑不走一般頂層 import，避免不同 playbook 下的 states.* 彼此污染。
         if isinstance(cls, str) and cls.startswith("."):
-            # 取得目前 playbook.base_path 與 最上層 playbook.base_path 的相對路徑，然後將 cls 中的相對路徑部分替換成最上層 playbook.base_path 的 module 路徑
-            root_path = self._root().playbook.base_path
-            if root_path is None:
-                raise ValueError(f"Playbook of {self._root().name} does not have a base_path, cannot resolve relative class path {cls}")
-            rel_path = self.playbook.base_path if self.playbook.base_path is not None else ""
-            # 剔除rel_path 裡面的 root_path 部分，得到相對於 root 的路徑，然後將這個路徑轉換成 module 路徑，最後將 cls 中的相對路徑部分替換成最上層 playbook.base_path 的 module 路徑
-            root_module = Path(rel_path).relative_to(root_path).as_posix().replace("/", ".") if rel_path else ""
-            rel_module, _, class_name = cls[1:].rpartition(".")
-            if rel_module:
-                full_module = f"{root_module}.{rel_module}" if root_module != "." else rel_module
-            else:
-                full_module = root_module
-            full_class_path = f"{full_module}.{class_name}"
-            resolved_cls = dynamic_import(full_class_path)
-            cls = resolved_cls
+            if self.playbook.base_path is None:
+                raise ValueError(
+                    f"Playbook of {self.name} does not have a base_path, cannot resolve relative class path {cls}"
+                )
+            cls = dynamic_import_from_base_path(self.playbook.base_path, cls)
                 
         if isinstance(cls, str):
-            raise ValueError(f"State {state_name} has class_ defined as string but does not start with '.': {cls}")    
+            raise ValueError(
+                f"State {state_name} has class_ defined as string but is not importable. "
+                "Use a relative path starting with '.' or a standard Python absolute import path. "
+                f"Got: {cls}"
+            )
 
         if issubclass(cls, Orchestrator):
             if subflow is None:

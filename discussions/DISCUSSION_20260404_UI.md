@@ -943,3 +943,102 @@ def test_class_path_resolution(tmp_path):
 如果你要，我下一步可以幫你把這個設計收斂成兩個具體方案，讓你選：
 1. World 生命週期內暫時加入/移除 sys.path 的 scoped 方案
 2. 不碰 sys.path，改走 importlib 的檔案載入方案
+
+============================================================
+---
+
+## [2026-04-13] ychsue 繼續討論
+
+### [2026-04-13] Github Copilot's Answer 01
+
+我先把你剛補充的設計偏好記進計畫：要保留可重用的絕對路徑能力，但不要把 template 綁死在某個固定 package 名稱。
+
+已插入記憶檔案 [](file:///c%3A/Users/hsuy1/AppData/Roaming/Code/User/workspaceStorage/9b4c4a9e9fc33a17b47ae84bbaf07a65/GitHub.copilot-chat/memory-tool/memories/M2VkNTQ5YTQtN2M3Zi00M2MxLTlkODEtOGJlNDQwZTFlM2M0/plan.md)
+
+你的方向是對的，但我會把它再拆乾淨一點：你其實有兩個需求，而且這兩個需求最好不要用同一套語法硬撐。
+
+第一個需求是「template 專案內的本地 state」，這種最適合用相對路徑，例如 .states.step1.Step1。它跟 playbook 所在位置綁定，搬家最穩。
+
+第二個需求是「跨多個 subflow 共用的 StateMachine」，這種確實需要某種絕對引用能力，不然每個 subflow 都寫一份很蠢。但我不建議把它做成 %ROOT% 直接字串替換成某個 package 名稱，因為那會把 playbook 變成半 Python import、半 template 語言，語義會變得不乾淨，而且最後你還是得處理 root 對應到哪個 package 的問題。
+
+你最後那句也先直接回答：要用的是 __init__.py，不是 init.py。  
+只有 __init__.py 會讓資料夾成為 regular package；init.py 對 Python import 沒有這個效果。
+
+我比較推薦的策略是這樣分層：
+
+1. 本地 flow 內部狀態用相對路徑
+例如：
+- .states.step1.Step1
+- .states.a1.A1
+
+這種語義是「相對於當前 playbook.base_path」。
+
+2. 真正可重用、跨 subflow 共用的 SM，用真正的絕對 Python 路徑
+例如：
+- my_shared_pkg.sms.review.ReviewSM
+- am_app.shared.notify.SendMailSM
+
+但前提是這些共用元件真的放在一個可 import 的 package 裡，通常是你 repo 內正式的 src package，或安裝過的 app package，而不是 init_project 複製出來的臨時目錄。
+
+3. 如果你想要「共用，但仍放在 init_project 產生的專案裡」，那我不建議假裝它是 Python 的絕對 package；比較好的做法是定義一種框架自己的 root-anchored 語法
+例如概念上像：
+- @root.shared.review.ReviewSM
+- root:shared.review.ReviewSM
+
+它的語義不是「Python 絕對 import」，而是「相對於 World 的根專案目錄」。這樣 runtime 可以自己解析，不必要求使用者先建立固定名稱的 package。
+
+這比 %ROOT%...... 更好，原因有三個：
+
+- %ROOT% 是字串替換，太早、太弱，沒有語義層次。
+- @root. 或 root: 這種寫法一看就知道這不是標準 Python import，而是 framework 的 root alias。
+- 之後如果你要支援更多 alias，例如 @app、@shared、@vendor，比較容易擴充。
+
+所以我會建議你不要把「init_project 產生的 root」硬轉成某個 package 名稱。比較好的規則是：
+
+- 相對路徑：給本地 flow 用
+- 真正絕對 Python path：給正式共享 package 用
+- root alias：給當前專案內、跨 subflow 共用但未 package 化的程式碼用
+
+如果你硬要走 package 化那條路，也不是不行，但代價比較大。你得把 template 改成像這樣的結構：
+
+- my_project/__init__.py
+- my_project/world.py
+- my_project/states/step1.py
+- my_project/subflows/subflow_a/states/a1.py
+
+然後 class_ 寫成：
+- my_project.states.step1.Step1
+- my_project.subflows.subflow_a.states.a1.A1
+
+這樣是正統 Python 作法，但缺點也很明顯：
+
+- init_project 複製後的目錄結構要重包一層 package
+- package 名稱要先決定
+- 使用者 rename 專案時，class path 可能要一起改
+- 對「只是想快速起一個 flow」的情境偏重
+
+所以若以你說的「最容易維護的統一策略」來看，我目前的建議排序是：
+
+1. 相對路徑 + 真正共享 package 並存
+2. 相對路徑 + root alias 並存
+3. 全面 package 化
+
+如果你問我現在這個專案最務實的選擇，我會選第 1 或第 2，不會先推全面 package 化。
+
+我建議的具體語義如下：
+
+- .states.step1.Step1
+意思：相對於當前 playbook
+
+- am_shared.sms.NotifySM
+意思：真正的 Python package，適合跨專案共用
+
+- @root.shared.notify.NotifySM
+意思：相對於目前 World 的根目錄，適合同一個 init_project 專案內跨 subflow 共用
+
+這樣就不需要把 project 當固定開頭，也不需要用 %ROOT% 做脆弱替換。
+
+如果你願意，我下一步可以直接幫你把這三種寫法整理成一份很短的 schema 提案，包含：
+1. 每種 path 的語義
+2. runtime 應如何解析
+3. 哪些情境該用哪一種

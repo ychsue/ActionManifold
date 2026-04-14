@@ -42,6 +42,8 @@
 2. 可 Resume
 3. 可擴充
 
+Playbook 中 `class_` 的相對/絕對路徑規則，請見 [README_Playbook.md](./README_Playbook.md)。
+
 - [ ] 未來，甚至可以像 SCXML 那樣能監看當前跑到哪個步驟等，之所以不使用 SCXML，是因為 transitions 不是重點，重點在 actions，而串接這些 transitions 的部分，則在 Orchestrator 宣告，這個宣告未來很可能可以移到 .json 或 .toml 檔上面，這樣，甚至可以在執行期間，直接動態更改 transitions。
 
 所以，元件主體為

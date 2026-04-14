@@ -1,4 +1,4 @@
-from pathlib import Path
+import sys
 from am_core.runtime_cli.cli import init_project
 from am_core.playbook import Playbook
 from am_core.world import World
@@ -30,7 +30,50 @@ def test_class_path_resolution(tmp_path):
     assert isinstance(sub_child, StateMachine)
     assert sub_child.__class__.__name__ == "A1"
 
-    # --- 6. 測試 nested state: a2 (project.subflows.subflow_a.states.a2.A2) ---
+    # --- 6. 測試 nested state: a2 (.states.a2.A2) ---
     sub_state_def2, sub_child_ctx2, sub_child2 = sub_orch.ini_child("a2", parent_state="subflow_a")
     assert isinstance(sub_child2, StateMachine)
     assert sub_child2.__class__.__name__ == "A2"
+
+
+def test_absolute_class_path_requires_user_import_context(tmp_path, monkeypatch):
+    shared_pkg = tmp_path / "shared_pkg"
+    shared_pkg.mkdir()
+    (shared_pkg / "__init__.py").write_text("", encoding="utf-8")
+    (shared_pkg / "shared_state.py").write_text(
+        "from am_core.state_machine import StateMachine\n\n"
+        "class SharedState(StateMachine):\n"
+        "    async def predict_output(self):\n"
+        "        return {'status': 'ok'}\n",
+        encoding="utf-8",
+    )
+
+    pb = Playbook(
+        {
+            "initial": "shared",
+            "final": ["shared"],
+            "states": [
+                {
+                    "name": "shared",
+                    "class_": "shared_pkg.shared_state.SharedState",
+                }
+            ],
+        },
+        base_path=str(tmp_path),
+    )
+
+    original_sys_path = list(sys.path)
+    with monkeypatch.context() as context:
+        context.setattr(sys, "path", list(original_sys_path))
+        try:
+            pb.get_state_constructor("shared")
+        except ModuleNotFoundError:
+            pass
+        else:
+            raise AssertionError("Absolute class paths should fail without user-managed import context")
+
+    monkeypatch.syspath_prepend(str(tmp_path))
+    ctor = pb.get_state_constructor("shared")
+
+    assert issubclass(ctor["class_"], StateMachine)
+    assert ctor["class_"].__name__ == "SharedState"

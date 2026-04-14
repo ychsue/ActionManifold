@@ -158,10 +158,12 @@ class Playbook:
                 raise ValueError(f"Unknown builtin state: {builtin_name}")
             ctor["class_"] = INTERNAL_STATES[builtin_name]
 
-        # 2-2 class：Python class path（"a.b.C"）
+        # 2-2 class：Python class path。
+        # - 以 "." 開頭：相對於當前 playbook.base_path，延後到 runtime 解析。
+        # - 其他字串：視為標準 Python absolute import path，必須已可被 Python import。
         class_path = state_def.get("class_")
         if class_path and class_path.startswith("."):
-            # 相對路徑，交由最上層ORCH或World來解析，Playbook 只負責把它傳下去
+            # 相對路徑在 runtime 會以當前 playbook.base_path 建立隔離的 module namespace。
             ctor["class_"] = class_path
         elif class_path:
             module_name, _, cls_name = class_path.rpartition(".")

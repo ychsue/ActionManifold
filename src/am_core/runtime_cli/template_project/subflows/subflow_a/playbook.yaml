@@ -11,4 +11,4 @@ states:
     # class_ 可省略，Playbook.get_state_constructor() 會自動用 Orchestrator
 
   - name: a2
-    class_: project.subflows.subflow_a.states.a2.A2 # 絕對 module path 
+    class_: .states.a2.A2 # 相對於當前 playbook.yaml 的 module path

@@ -3,8 +3,8 @@ final: [b2]
 
 states:
   - name: b1
-    class_: project.subflows.subflow_a.subflow_b.states.b1.B1
+    class_: .states.b1.B1
     to: b2
 
   - name: b2
-    class_: project.subflows.subflow_a.subflow_b.states.b2.B2
+    class_: .states.b2.B2
