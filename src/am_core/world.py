@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any, Dict, Optional
 
 from .ctx.context import Ctx
-from .orchestrator import Orchestrator
+from .orchestrator import Orchestrator, Rehearsal
 from .playbook import Playbook
 
 
@@ -33,10 +33,15 @@ class World:
         self.name = name
         self.module_root = self._infer_module_root()
 
+        from am_core.runtime_store import WorldRuntimeStore
+
+        self.runtime_store = WorldRuntimeStore()
+
         # 建立 root orchestrator
         self.root = Orchestrator(
             playbook=self.playbook,
             ctx=self.ctx,
+            runtime_store=self.runtime_store,
             metadata=self.metadata,
             name=name,
         )
@@ -88,6 +93,8 @@ class World:
             self._task = None
 
     async def simulate(self):
+        rehearsal: Rehearsal = self.ctx.get("rehearsal")
+        rehearsal.mode = "simulate"
         return await self.root.run(sm_mode="interactive_simulate")
 
     async def replay(self):
