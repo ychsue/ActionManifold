@@ -6,6 +6,8 @@ import json
 from pathlib import Path
 from typing import Any, Dict, Optional
 
+from am_core.interactive.adapters.sse_adapter import SSEAdapter
+
 from .ctx.context import Ctx
 from .orchestrator import Orchestrator, Rehearsal
 from .playbook import Playbook
@@ -46,6 +48,11 @@ class World:
             name=name,
         )
         
+        ## 給 root ctx 一個 adapter（你原本就有 set_interactive_adapter）
+        self.ctx.set_interactive_adapter(
+            SSEAdapter(runtime_store=self.runtime_store, emit=self.emit)
+        )
+
         # event subscribers，給 GUI/CLI/ VSCode Extension 用
         self._subscribers = set()
         

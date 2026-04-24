@@ -3,6 +3,7 @@
 from __future__ import annotations
 from sqlite3 import adapt
 from typing import Any, Dict, List, Optional
+from uuid import uuid4
 
 from am_core.ctx.ctx_wrapper import WrappedCtx
 from am_core.ctx.metadata_wrapper import MetadataDeltaCollector, WrappedMetadata
@@ -66,6 +67,7 @@ class StateMachine(Generic[TOutput, TCtxWrite, TMetadata]):
         # await_input 的資料結構，只在 interactive_simulate 模式下會用到
         await_input_data: AwaitInput = {
             "kind": "interactive_simulate",
+            "await_id": f"{self.name}_{id(self)}",  # unique id for this await, 可以讓 adapter 辨識是哪個 state 的 await
             "state": self.name if self.name else "unnamed_state",
             "suggested": {
                 "output": dict(output),

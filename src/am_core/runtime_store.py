@@ -17,14 +17,17 @@ class RuntimeStore(abc.ABC):
     def unregister_orchestrator(self, orch_id: str) -> None:
         ...
 
+    # 目前沒用到，先保留接口
     @abc.abstractmethod
     def register_pending(self, orch_id: str, future) -> None:
         ...
 
+    # 目前沒用到，先保留接口
     @abc.abstractmethod
     def unregister_pending(self, orch_id: str) -> None:
         ...
 
+    # 目前沒用到，先保留接口
     @abc.abstractmethod
     def resolve_pending(self, orch_id: str, decision: Any) -> None:
         ...
@@ -33,9 +36,21 @@ class RuntimeStore(abc.ABC):
     def get_active_orchestrators(self) -> Dict[str, Any]:
         ...
 
+    # 目前沒用到，先保留接口
     @abc.abstractmethod
     def get_pending(self) -> Dict[str, Any]:
         ...
+
+    @abc.abstractmethod
+    def register_adapter_pending(self, await_id: str, future) -> None:
+        ...
+        
+    @abc.abstractmethod
+    def resolve_adapter_pending(self, await_id: str, decision: Any) -> None:
+        ...
+
+    @abc.abstractmethod
+    def get_adapter_pending(self) -> Dict[str, Any]: ...
 
 from typing import Dict, Any
 
@@ -45,6 +60,7 @@ class WorldRuntimeStore(RuntimeStore):
         self.active_orchestrators: Dict[str, Any] = {}
         self.pending_decisions: Dict[str, Any] = {}
         self.buffered_decisions: Dict[str, Any] = {}
+        self.adapter_pending: Dict[str, Any] = {}
 
     def register_orchestrator(self, orch) -> None:
         self.active_orchestrators[orch.orch_id] = orch
@@ -77,3 +93,15 @@ class WorldRuntimeStore(RuntimeStore):
 
     def get_pending(self) -> Dict[str, Any]:
         return dict(self.pending_decisions)
+
+    def register_adapter_pending(self, await_id: str, future):
+        self.adapter_pending[await_id] = future
+
+    def resolve_adapter_pending(self, await_id: str, decision: Any):
+        fut = self.adapter_pending.get(await_id)
+        if fut and not fut.done():
+            fut.set_result(decision)
+        self.adapter_pending.pop(await_id, None)
+
+    def get_adapter_pending(self) -> Dict[str, Any]:
+        return dict(self.adapter_pending)

@@ -11,6 +11,7 @@ class AwaitSuggested(TypedDict):
 
 class AwaitInput(TypedDict):
     kind: str                     # "interactive_simulate"
+    await_id: str                 # unique id for this await
     state: str                    # state name
     chain: List[str]              # state chain (for debugging / UI hint)
     suggested: AwaitSuggested     # default values from predict_*

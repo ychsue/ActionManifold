@@ -1,3 +1,5 @@
+# [2026-04-24] 決定移除 Interactive Decision 的功能，因為應該改用 adapter 的方式來實作
+
 # [2026-04-22] 有 Session Manager 和 Interactive Decision 的雛型了
 
 # [2026-04-14] 在 Github Copilot 的幫助下，完成了 Playbook `class_` 路徑解析的設計與實作，並且撰寫了相關的說明文件與討論紀錄
