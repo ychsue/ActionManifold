@@ -112,7 +112,7 @@ class Ctx:
     # dump（debug 與 GUI 用）
     # -------------------------
     def dump(self) -> Dict[str, Any]:
-        """輸出當前 ctx 的所有值（包含 parent）"""
+        """輸出當前 ctx 的所有值（不包含 parent）"""
         return dict(self._values)
 
     # -------------------------

@@ -163,10 +163,15 @@ class Orchestrator:
 
         raise TypeError(f"Unsupported constructor class for state {state_name}: {cls}")
 
-    def _root(self):
+    def _root(self) -> Any:
         if self.parent is None:
             return self
-        return self.parent._root()
+        elif type(self.parent) == Orchestrator:
+            return self.parent._root()
+        elif type(self.parent).__name__ == "World":  # 避免直接 import World 導致 circular import
+            return self.parent
+        else:
+            raise TypeError(f"Unknown parent type: {type(self.parent)}")
 
     # ------------------------------------------------------------
     # replay helper
@@ -283,23 +288,6 @@ class Orchestrator:
                 restore_event=restore_event,
             )
 
-            # 5.5 interactive_simulate：每跑完一個 SM，就停下來等 UI 決策
-            if sm_mode == "interactive_simulate" and isinstance(child, StateMachine):
-                # 丟事件給 UI
-                self.emit({
-                    "kind": "wait_for_decision",
-                    "orch_id": self.orch_id,
-                    "state": current_state,
-                    "parent_state": parent_state,
-                    "metadata": dict(self.metadata),
-                    "ctx": child_ctx.dump(),
-                    "transition": next_state,
-                    "timestamp": time.time(),
-                })
-
-                # 停在這裡等 UI
-                _ = await self._wait_for_decision()
-            
             # ------------------------------------------------------------
             # 6. 結束條件
             # ------------------------------------------------------------
@@ -466,6 +454,12 @@ class Orchestrator:
             })
 
         rehearsal.event_log.append(exit_event)
+        
+        # 如果是 root orchestrator，就讓 world 寫 snapshot
+        root = self._root()
+        if hasattr(root, "save_snapshot"):
+            root.save_snapshot()        
+        
         return next_state
 
     # ------------------------------------------------------------
@@ -529,31 +523,6 @@ class Orchestrator:
             return REPLAY_PHASE
 
         raise RuntimeError("Unknown exec_status")
-
-    async def _wait_for_decision(self):
-        """
-        interactive_simulate 用：停在這裡等 UI 決策。
-        使用 RuntimeStore 來管理 pending futures。
-        """
-        loop = asyncio.get_event_loop()
-        fut = loop.create_future()
-
-        # 註冊 pending future
-        self.runtime.register_pending(self.orch_id, fut)
-
-        # 等待 UI 的決策
-        decision = await fut
-
-        # 清除 pending
-        self.runtime.unregister_pending(self.orch_id)
-
-        return decision
-    
-    def provide_decision(self, decision):
-        """
-        給外部（例如 API handler）呼叫，用來喚醒等待中的 orchestrator。
-        """
-        self.runtime.resolve_pending(self.orch_id, decision)
 
 # ------------------------------------------------------------
 # prepare_resume

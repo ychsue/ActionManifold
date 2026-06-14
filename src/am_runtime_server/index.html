@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>AM Runtime UI MVP</title>
+  <style>
+    body { font-family: sans-serif; margin: 16px; }
+    .row { display: flex; gap: 16px; }
+    .col { flex: 1; border: 1px solid #ccc; padding: 8px; }
+    textarea { width: 100%; height: 160px; font-family: monospace; }
+    pre { background: #f5f5f5; padding: 8px; max-height: 200px; overflow: auto; }
+    .badge { display: inline-block; padding: 2px 6px; background: #eee; border-radius: 4px; margin-right: 4px; }
+  </style>
+</head>
+<body>
+  <h1>AM Runtime – Interactive Simulate MVP</h1>
+
+  <div>
+    <button id="btn-create">1. Create Session (template_project)</button>
+    <button id="btn-start" disabled>2. Start Simulate</button>
+    <div id="session-info"></div>
+  </div>
+
+  <hr />
+
+  <div class="row">
+    <div class="col">
+      <h3>Incoming adapter_request</h3>
+      <div>await_id: <span id="await-id" class="badge">-</span></div>
+      <div>state: <span id="state" class="badge">-</span></div>
+      <div>chain:</div>
+      <pre id="chain"></pre>
+      <div>suggested:</div>
+      <pre id="suggested"></pre>
+      <div>ui_hint:</div>
+      <pre id="ui-hint"></pre>
+    </div>
+
+    <div class="col">
+      <h3>Edit decision</h3>
+      <p>output (JSON):</p>
+      <textarea id="output"></textarea>
+      <p>ctx_delta (JSON array):</p>
+      <textarea id="ctx-delta"></textarea>
+      <p>metadata_delta (JSON):</p>
+      <textarea id="metadata-delta"></textarea>
+      <button id="btn-send" disabled>Send Decision</button>
+      <div id="send-status"></div>
+    </div>
+  </div>
+
+  <hr />
+
+  <h3>Raw events</h3>
+  <pre id="events-log"></pre>
+
+  <script>
+    const $ = (id) => document.getElementById(id);
+
+    let sessionId = null;
+    let es = null;
+    let currentAwaitId = null;
+
+    $("btn-create").onclick = async () => {
+      const res = await fetch("/sessions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ project_root: null })
+      });
+      const data = await res.json();
+      sessionId = data.session_id;
+
+      $("session-info").innerHTML =
+        `session_id = <b>${sessionId}</b><br>` +
+        `work_dir = <b>${data.work_dir}</b><br>` +
+        `project_root = <b>${data.project_root}</b>`;
+
+      $("btn-start").disabled = false;
+
+      if (es) es.close();
+      es = new EventSource(`/events/${sessionId}`);
+      es.onmessage = (e) => {
+        const ev = JSON.parse(e.data);
+        logEvent(ev);
+        if (ev.kind === "adapter_request") {
+          handleAdapterRequest(ev);
+        }
+      };
+    };
+
+    $("btn-start").onclick = async () => {
+      await fetch("/simulate_start", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ session_id: sessionId }),
+      });
+      $("btn-start").disabled = true;
+    };
+
+    function logEvent(ev) {
+      const log = $("events-log");
+      log.textContent += JSON.stringify(ev, null, 2) + "\n\n";
+      log.scrollTop = log.scrollHeight;
+    }
+
+    function handleAdapterRequest(ev) {
+      currentAwaitId = ev.await_id;
+      $("await-id").textContent = ev.await_id;
+      $("state").textContent = ev.state;
+      $("chain").textContent = JSON.stringify(ev.chain || [], null, 2);
+      $("suggested").textContent = JSON.stringify(ev.suggested || {}, null, 2);
+      $("ui-hint").textContent = JSON.stringify(ev.ui_hint || {}, null, 2);
+
+      const s = ev.suggested || {};
+      $("output").value = JSON.stringify(s.output || {}, null, 2);
+      $("ctx-delta").value = JSON.stringify(s.ctx_delta || [], null, 2);
+      $("metadata-delta").value = JSON.stringify(s.metadata_delta || {}, null, 2);
+
+      $("btn-send").disabled = false;
+      $("send-status").textContent = "";
+    }
+
+    $("btn-send").onclick = async () => {
+      try {
+        const output = JSON.parse($("output").value || "{}");
+        const ctxDelta = JSON.parse($("ctx-delta").value || "[]");
+        const metadataDelta = JSON.parse($("metadata-delta").value || "{}");
+
+        const res = await fetch("/simulate_step", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            session_id: sessionId,
+            await_id: currentAwaitId,
+            decision: { output, ctx_delta: ctxDelta, metadata_delta: metadataDelta },
+          }),
+        });
+
+        $("send-status").textContent = "Sent.";
+        $("btn-send").disabled = true;
+        currentAwaitId = null;
+      } catch (e) {
+        $("send-status").textContent = "Error: " + e;
+      }
+    };
+  </script>
+</body>
+</html>

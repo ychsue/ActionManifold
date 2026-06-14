@@ -36,3 +36,12 @@ class FakeRuntimeStore(RuntimeStore):
 
     def get_pending(self):
         return dict(self.pending)
+    
+    def get_adapter_pending(self):
+        return {}
+    
+    def register_adapter_pending(self, await_id: str, future) -> None:
+        pass
+
+    def resolve_adapter_pending(self, await_id: str, decision: Any) -> None:
+        pass

@@ -1,3 +1,5 @@
+# [2026-06-14] 由於寫到前端之後，發現有 XState 已經做得很好，花了將近兩個月的思考，想想我想改用 XState, React Flow 與 Node-RED 來做，所以，現在還在測試中，因此，暫時這個專案進入發想+測試階段，等確定後，再開始正式的
+
 # [2026-04-24] 決定移除 Interactive Decision 的功能，因為應該改用 adapter 的方式來實作
 
 # [2026-04-22] 有 Session Manager 和 Interactive Decision 的雛型了

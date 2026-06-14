@@ -33,6 +33,7 @@ class World:
         self.metadata = metadata or {}
         self.ctx = ctx or Ctx(parent=None,current_state= playbook.initial_state())
         self.name = name
+        self.work_dir = Path.cwd()  # 預設工作目錄為當前目錄，可以在 create_session 時指定
         self.module_root = self._infer_module_root()
 
         from am_core.runtime_store import WorldRuntimeStore
@@ -43,6 +44,7 @@ class World:
         self.root = Orchestrator(
             playbook=self.playbook,
             ctx=self.ctx,
+            parent=self,
             runtime_store=self.runtime_store,
             metadata=self.metadata,
             name=name,
@@ -137,6 +139,7 @@ class World:
         """
         發出事件，會呼叫所有訂閱者的 callback。
         """
+        self.save_event(event)  # 先把事件存到檔案裡，以便之後 replay/resume 用
         for callback in self._subscribers:
             callback(event)
 
@@ -219,6 +222,28 @@ class World:
                 node["subflows"].append(self._walk_playbook(buf, chain + [state_name]))
                 
         return node
+
+    def save_event(self, event):
+        path = self.work_dir / "events.jsonl"
+        with path.open("a", encoding="utf-8") as f:
+            f.write(json.dumps(event) + "\n")
+
+    def save_snapshot(self):
+        state = self.get_runtime_state()
+        snap = {
+            "current_state": state["current_state"],
+            "kind": state["kind"],
+            "chain": state["chain"],
+            "ctx": state["ctx"],
+            "ctx_delta": state["ctx_delta"],
+            "metadata": state["metadata"],
+            "metadata_delta": state["metadata_delta"],
+            "status": state["status"],
+            "events": self.get_event_log(),
+        }
+        (self.work_dir / "snapshot.json").write_text(
+            json.dumps(snap, indent=2), encoding="utf-8"
+        )
 
 
 #------------------------------------------------------------

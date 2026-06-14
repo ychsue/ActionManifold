@@ -8,6 +8,9 @@
 
 之所以稱為 ActionManifold，是因為這是以活動為主，其實很像 n8n 或 nodered 等，但是，我希望能夠同時能處理 design time 與 runtime 的控制。
 
+## 重要
+‼️‼️‼️由於寫到前端之後，發現有 XState 已經做得很好，花了將近兩個月的思考，想想我想改用 XState, React Flow 與 Node-RED 來做，所以，現在還在測試中，因此，暫時這個專案進入發想+測試階段，等確定後，再開始正式的
+
 ## Development Time
 ### 如何設定
 這個部分，乃是透過 [@feature_unit(.....)](./src/am_core/feature/feature_unit.py) 來設定，由 [core_mainline.py](./am_meta/core_mainline.py) 可以看到怎麼設定他，而Gantt 圖的時間算法則設計於 [resolve_time.py](./src/am_core/feature/resolve_time.py)。
